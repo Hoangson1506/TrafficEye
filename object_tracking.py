@@ -26,8 +26,10 @@ if __name__ == "__main__":
 
     if args.tracker == 'sort':
         tracker_instance = SORT(cost_function=ciou, max_age=60, min_hits=5, iou_threshold=0.3)
+        conf_threshold = 0.25
     elif args.tracker == 'bytetrack':
-        tracker_instance = ByteTrack(cost_function=ciou, max_age=60, min_hits=5, iou_threshold=0.5) 
+        tracker_instance = ByteTrack(cost_function=ciou, max_age=60, min_hits=5, high_conf_threshold=0.3)
+        conf_threshold = 0.1
     else:
         raise ValueError(f"Unknown tracker: {args.tracker}")
 
@@ -53,13 +55,13 @@ if __name__ == "__main__":
         output_path=None,
         device=device,
         stream=True,
+        conf_threshold=conf_threshold,
         classes=[0]
     )
-    tracker = SORT(cost_function=ciou, max_age=30, min_hits=5, iou_threshold=0.3)
     final_results = []
 
     for i, result in enumerate(dets):
-        frame, tracked_objs = process_and_write_frame(i, result, tracker, video_writer)
+        frame, tracked_objs = process_and_write_frame(i, result, tracker_instance, video_writer)
         final_results.extend(tracked_objs)
         cv2.imshow("Tracking Results", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
