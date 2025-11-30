@@ -51,6 +51,8 @@ target/
 # ----------------------------------------------------------------------
 # Log files
 *.log
+data/
+output/
 
 # Credentials and secrets
 *.key

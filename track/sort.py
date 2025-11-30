@@ -1,18 +1,18 @@
 from track.utils import *
-from track.kalman_box_tracker import KalmanBoxTracker
 from track.base_tracker import BaseTracker
 
 class SORT(BaseTracker):
     """This is the SORT (Simple Online and Realtime Tracking) algorithm for Object Tracking
     """
 
-    def __init__(self, max_age=1, min_hits=3, iou_threshold=0.3):
+    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, iou_threshold=0.3):
         super().__init__()
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
         self.trackers = []
         self.frame_count = 0
+        self.cost_function = cost_function
     
     def _associate_detections_to_trackers(self, detections, trackers, iou_threshold = 0.3):
         """Assigns detections to tracked object
@@ -29,14 +29,14 @@ class SORT(BaseTracker):
         if (len(trackers) == 0):
             return np.empty((0, 2), dtype=int), np.arange(len(detections)), np.empty((0, 5), dtype=int)
         
-        iou_matrix = iou(detections[:, np.newaxis], trackers[np.newaxis, :])
+        cost_matrix = self.cost_function(detections[:, np.newaxis], trackers[np.newaxis, :])
 
-        if min(iou_matrix.shape) > 0:
-            a = (iou_matrix > iou_threshold).astype(np.int32)
+        if min(cost_matrix.shape) > 0:
+            a = (cost_matrix > iou_threshold).astype(np.int32)
             if a.sum(1).max() == 1 and a.sum(0).max() == 1:
                 matched_indices = np.stack(np.where(a), axis=1)
             else:
-                matched_indices = linear_assignment(-iou_matrix)
+                matched_indices = linear_assignment(-cost_matrix)
         else:
             matched_indices = np.empty((0, 2), dtype=int)
 
@@ -52,7 +52,7 @@ class SORT(BaseTracker):
 
         matches = []
         for m in matched_indices:
-            if (iou_matrix[m[0], m[1]] < iou_threshold):
+            if (cost_matrix[m[0], m[1]] < iou_threshold):
                 unmatched_detections.append(m[0])
                 unmatched_trackers.append(m[1])
             else:

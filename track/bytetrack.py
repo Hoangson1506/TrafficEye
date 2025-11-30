@@ -1,18 +1,18 @@
 from track.utils import *
-from track.kalman_box_tracker import KalmanBoxTracker
 from track.base_tracker import BaseTracker
 
 class ByteTrack(BaseTracker):
     """This is the ByteTrack algorithm for Object Tracking
     """
 
-    def __init__(self, max_age=1, min_hits=3, iou_threshold=0.3):
+    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, iou_threshold=0.3):
         super().__init__()
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
         self.trackers = []
         self.frame_count = 0
+        self.cost_function = cost_function
 
     def _associate_detections_to_trackers(self, detections, trackers, iou_threshold = 0.3):
         if (len(trackers) == 0):
@@ -27,7 +27,7 @@ class ByteTrack(BaseTracker):
         low_indices = np.where(low_mask)[0]
 
         if len(high_conf_dets) > 0:
-            high_conf_iou_matrix = iou(high_conf_dets[:, np.newaxis], trackers[np.newaxis, :])
+            high_conf_iou_matrix = self.cost_function(high_conf_dets[:, np.newaxis], trackers[np.newaxis, :])
 
             if min(high_conf_iou_matrix.shape) > 0:
                 a = (high_conf_iou_matrix > iou_threshold).astype(np.int32)
@@ -54,7 +54,7 @@ class ByteTrack(BaseTracker):
                     unmatched_trackers.remove(tracker_idx)
 
         if len(low_conf_dets) > 0 and len(unmatched_trackers) > 0:
-            low_conf_iou_matrix = iou(low_conf_dets[:, np.newaxis], trackers[unmatched_trackers][np.newaxis, :])
+            low_conf_iou_matrix = self.cost_function(low_conf_dets[:, np.newaxis], trackers[unmatched_trackers][np.newaxis, :])
 
             if min(low_conf_iou_matrix.shape) > 0:
                 a = (low_conf_iou_matrix > iou_threshold).astype(np.int32)
