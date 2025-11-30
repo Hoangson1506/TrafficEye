@@ -3,49 +3,36 @@ from track.sort import SORT
 from track.bytetrack import ByteTrack
 from detect.detect import inference_video
 from track.utils import ciou 
+from utils import process_and_write_frame, parse_args
 import cv2
 import numpy as np
-
-def process_and_write_frame(frame_id, result, tracker, video_writer):
-    """Process a single detection result, update the tracker, draws bbox, writes the frame and returns the tracked objects
-
-    Args:
-        frame_id (int): frame index
-        dets (ArrayLike): List of detections in the format [x1, y1, x2, y2, score]
-        tracker (BaseTracker): A tracking algorithm instance
-        video_writer (VideoWriter): A cv2 VideoWriter object
-    """
-    frame = result.orig_img.copy()
-    boxes = result.boxes.xyxy.cpu().numpy()
-    conf = result.boxes.conf.cpu().numpy()
-
-    if boxes is not None and len(boxes) > 0:
-        det = np.hstack((boxes, conf.reshape(-1, 1)))
-    else:
-        det = np.empty((0, 5))
-
-    tracked_objs = tracker.update(dets=det)
-    frame_id = np.full((len(tracked_objs), 1), frame_id + 1)
-    tracked_objs = np.hstack((frame_id, tracked_objs))
-
-    if tracked_objs.size > 0:
-        for track in tracked_objs:
-            frame_id, x1, y1, x2, y2, track_id = track.astype(int)
-            track_id = int(track_id)
-            color = ((37 * track_id) % 255, (17 * track_id) % 255, (29 * track_id) % 255)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, f"ID: {track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
-    video_writer.write(frame)
-
-    return frame, tracked_objs
+import os
+import csv
 
 
 if __name__ == "__main__":
-    data_path = "/home/hoangsonbandon/code/Object-Tracking/data/MOT16 test video/MOT16-01-raw.mp4"
-    output_path = "output"
-    result_path = None
-    model = YOLO("yolo12n.pt", task='detect', verbose=True)
+    args = parse_args()
+
+    # Prepare output paths
+    data_path_name = os.path.splitext(os.path.basename(args.data_path))
+    base_name = data_path_name[0]
+    ext = data_path_name[1]
+    result_filename = f"{base_name}_{args.tracker}{ext}"
+    video_result_path = os.path.join(args.output_dir, "video", result_filename)
+    csv_result_path = os.path.join(args.output_dir, "csv", f"{base_name}_{args.tracker}.csv")
+    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, "video"), exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, "csv"), exist_ok=True)
+
+    if args.tracker == 'sort':
+        tracker_instance = SORT(cost_function=ciou, max_age=60, min_hits=5, iou_threshold=0.3)
+    elif args.tracker == 'bytetrack':
+        tracker_instance = ByteTrack(cost_function=ciou, max_age=60, min_hits=5, iou_threshold=0.5) 
+    else:
+        raise ValueError(f"Unknown tracker: {args.tracker}")
+
+    data_path = args.data_path
+    model = YOLO(args.model, task='detect', verbose=True)
     device = "cuda"
     np.random.seed(42)
 
@@ -56,14 +43,14 @@ if __name__ == "__main__":
     FPS = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-    video_writer = cv2.VideoWriter(result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
+    video_writer = cv2.VideoWriter(video_result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
     cv2.namedWindow("Tracking Results", cv2.WINDOW_AUTOSIZE)
 
     # Prepare detections
     dets = inference_video(
         model=model,
         data_path=data_path,
-        output_path=output_path,
+        output_path=None,
         device=device,
         stream=True,
         classes=[0]
@@ -80,6 +67,11 @@ if __name__ == "__main__":
     
     video_writer.release()
     cv2.destroyAllWindows()
-    print(f"Tracking results succesfully saved to {result_path}")
+
+    # Save results to CSV
+    with open(csv_result_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(final_results)
+    print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
     print(FRAME_WIDTH, FRAME_HEIGHT, FPS)
     print(len(final_results))
