@@ -10,7 +10,7 @@ def inference_video(
         stream: bool = True,
         conf_threshold = 0.25,
         iou_threshold = 0.5,
-        classes: Optional[List[int]] = [0]
+        classes: Optional[List[int]] = None
 ) -> Results:
     """Run object detection model and return results
 

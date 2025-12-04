@@ -3,9 +3,10 @@ from track.sort import SORT
 from track.bytetrack import ByteTrack
 from detect.detect import inference_video
 from track.utils import ciou, iou
-from utils import process_and_write_frame, parse_args_tracking, handle_video_capture, handle_result_filename, select_zones
+from utils import draw_and_write_frame, parse_args_tracking, handle_video_capture, handle_result_filename, select_zones, preprocess_detection_result
 import cv2
 import numpy as np
+import supervision as sv
 import os
 import csv
 
@@ -37,7 +38,12 @@ if __name__ == "__main__":
 
     # Setup VideoWriter and display Window
     FRAME_WIDTH, FRAME_HEIGHT, FPS, first_frame, ret = handle_video_capture(data_path)
-    select_zones(first_frame)
+    polygon_points, line_points = select_zones(first_frame)
+    polygon_points = np.array(polygon_points, dtype=int)
+    polygon_zone = sv.PolygonZone(polygon_points)
+    start, end = sv.Point(x=line_points[0][0], y = line_points[0][1]), sv.Point(x=line_points[1][0], y = line_points[1][1])
+    line_zone = sv.LineZone(start=start, end=end)
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(video_result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
     cv2.namedWindow("Tracking Results", cv2.WINDOW_AUTOSIZE)
@@ -49,15 +55,21 @@ if __name__ == "__main__":
         output_path=None,
         device=device,
         stream=True,
-        conf_threshold=conf_threshold,
-        classes=[0]
+        conf_threshold=conf_threshold
     )
     final_results = []
 
     for i, result in enumerate(dets):
-        frame, tracked_objs = process_and_write_frame(i, result, tracker_instance, video_writer)
+        frame, det = preprocess_detection_result(result, polygon_zone)
+
+        # Object tracking
+        tracked_objs = tracker_instance.update(dets=det)
+        frame_id = np.full((len(tracked_objs), 1), i + 1)
+        tracked_objs = np.hstack((frame_id, tracked_objs))
+
+        draw_and_write_frame(tracked_objs, frame, video_writer)
+
         final_results.extend(tracked_objs)
-        cv2.imshow("Tracking Results", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     

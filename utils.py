@@ -4,6 +4,7 @@ import numpy as np
 import os
 import re
 import glob
+import supervision as sv
 
 def select_zones(first_frame):
     """Interactive mode to draw line and RoI zones
@@ -38,67 +39,82 @@ def select_zones(first_frame):
         for pt in drawing_points:
             cv2.circle(display_frame, pt, 5, (0, 255, 0), -1)
 
-        if len(polygon_points) > 0:
-            pts = np.array(polygon_points, np.int32).reshape((-1, 1, 2))
-            cv2.polylines(display_frame, [pts], True, (255, 0, 0), 2)
-        elif len(drawing_points) > 1 and MODE == "POLYGON":
+        if len(polygon_points) >= 3:
             pts = np.array(polygon_points, np.int32).reshape((-1, 1, 2))
             cv2.polylines(display_frame, [pts], True, (255, 0, 0), 2)
 
-        if len(drawing_points) > 1 and MODE == "LINE":
-            cv2.line(display_frame, drawing_points[0], drawing_points[1], (0, 0, 255), 2)
+        if len(line_points) == 2:
+            cv2.line(display_frame, line_points[0], line_points[1], (0, 0, 255), 2)
 
+        cv2.putText(display_frame,
+                    f"MODE: {'POLYGON' if MODE == "POLYGON" else 'LINE'}",
+                    (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                    (0, 255, 255), 2)
         cv2.imshow(window_name, display_frame)
         key = cv2.waitKey(1) & 0xFF
 
-        if key == ord('n') and MODE == "POLYGON":
-            if len(drawing_points) > 2:
-                polygon_points = drawing_points
-                drawing_points = []
-                MODE = "LINE"
-                print("Polygon saved, now to Line")
-
-        elif key == ord('q'):
-            if MODE == "LINE" and len(drawing_points) >= 2:
-                line_points = [drawing_points[0], drawing_points[1]]
-
+        if key == 27:
+            print("ESC pressed → exit")
             break
 
-    cv2.destroyAllWindows()
+        if key == ord('n') and MODE == "POLYGON":
+            if len(drawing_points) < 3:
+                print("Polygon needs ≥ 3 points!")
+                continue
+            polygon_points = drawing_points.copy()
+            drawing_points.clear()
+            MODE = "LINE"
+            print("Polygon saved, now to Line")
 
-def process_and_write_frame(frame_id, result, tracker, video_writer):
-    """Process a single detection result, update the tracker, draws bbox, writes the frame and returns the tracked objects
+        elif key == ord('q'):
+            if len(drawing_points) < 2:
+                print("Line needs exactly 2 points!")
+                continue
+            line_points = drawing_points[:2]
+            print("Line saved → Done")
+
+    cv2.destroyAllWindows()
+    return polygon_points, line_points
+
+def preprocess_detection_result(result, polygon_zone):
+    """Preprocess the YOLO/Roboflow detection result for tracking algorithm
 
     Args:
-        frame_id (int): frame index
-        dets (ArrayLike): List of detections in the format [x1, y1, x2, y2, score]
-        tracker (BaseTracker): A tracking algorithm instance
-        video_writer (VideoWriter): A cv2 VideoWriter object
+        result (ArrayLike): The detection result
     """
     frame = result.orig_img.copy()
-    boxes = result.boxes.xyxy.cpu().numpy()
-    conf = result.boxes.conf.cpu().numpy()
+
+    dets = sv.Detections.from_ultralytics(result)
+    mask = polygon_zone.trigger(detections=dets)
+    dets = dets[mask]
+    boxes = dets.xyxy
+    conf = dets.confidence
 
     if boxes is not None and len(boxes) > 0:
         det = np.hstack((boxes, conf.reshape(-1, 1)))
     else:
         det = np.empty((0, 5))
 
-    tracked_objs = tracker.update(dets=det)
-    frame_id = np.full((len(tracked_objs), 1), frame_id + 1)
-    tracked_objs = np.hstack((frame_id, tracked_objs))
+    return frame, det
 
+def draw_and_write_frame(tracked_objs, frame, video_writer):
+    """Process a single detection result, draws bbox, writes the frame
+
+    Args:
+        tracked_objs (ArrayLike): List of tracked objects [frame_id, x1, y1, x2, y2, track_id]
+        frame (ArrayLike): The frame to write on
+        video_writer (VideoWriter): A cv2 VideoWriter object
+    """
     if tracked_objs.size > 0:
         for track in tracked_objs:
-            frame_id, x1, y1, x2, y2, track_id = track.astype(int)
+            _, x1, y1, x2, y2, track_id = track.astype(int)
             track_id = int(track_id)
             color = ((37 * track_id) % 255, (17 * track_id) % 255, (29 * track_id) % 255)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, f"ID: {track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
     video_writer.write(frame)
-
-    return frame, tracked_objs
+    cv2.imshow("Tracking Results", frame)
 
 def handle_result_filename(data_path, tracker_name):
     """Generate result filename based on data_path and tracker_name
