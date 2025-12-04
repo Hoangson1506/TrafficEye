@@ -65,9 +65,14 @@ if __name__ == "__main__":
         # Object tracking
         tracked_objs = tracker_instance.update(dets=det)
         frame_id = np.full((len(tracked_objs), 1), i + 1)
-        tracked_objs = np.hstack((frame_id, tracked_objs))
+        tracked_objs = np.hstack((frame_id, tracked_objs)) # [frame_id, x1, y1, x2, y2, track_id]
+        
+        draw_and_write_frame(tracked_objs, frame, video_writer, line_points)
 
-        draw_and_write_frame(tracked_objs, frame, video_writer)
+        # Line crossing check
+        tracked_objs = sv.Detections(xyxy=tracked_objs[:, 1:5], tracker_id=tracked_objs[:, -1])
+        crossed_in, crossed_out = line_zone.trigger(detections=tracked_objs)
+        print(line_zone.in_count, line_zone.out_count)
 
         final_results.extend(tracked_objs)
         if cv2.waitKey(1) & 0xFF == ord('q'):

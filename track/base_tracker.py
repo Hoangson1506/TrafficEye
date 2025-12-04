@@ -45,7 +45,7 @@ class BaseTracker:
         tracks = np.ma.compress_rows(np.ma.masked_invalid(tracks))
         for t in reversed(to_del):
             self.trackers.pop(t)
-        matched, unmatched_dets, unmatched_trks = self._associate_detections_to_trackers(dets, tracks)
+        matched, unmatched_dets, _ = self._associate_detections_to_trackers(dets, tracks)
 
         for m in matched:
             self.trackers[m[1]].update(dets[m[0], :4])

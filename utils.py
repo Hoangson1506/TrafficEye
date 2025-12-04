@@ -11,6 +11,10 @@ def select_zones(first_frame):
 
     Args:
         first_frame(ArrayLike, np.ndarray): The first frame of the video
+
+    Return:
+        polygon_points (list): List of points of the RoI (N, 2)
+        line_points (list): List of points of the line (2, 2)
     """
     drawing_points = []
     polygon_points = []
@@ -81,6 +85,11 @@ def preprocess_detection_result(result, polygon_zone):
 
     Args:
         result (ArrayLike): The detection result
+        polygon_zone (sv.PolygonZone): The region of interest to filter out detection results
+
+    Return:
+        frame (ArrayLike): The original frame
+        det (ArrayLike): The preprocessed detection result (x1, y1, x2, y2, conf)
     """
     frame = result.orig_img.copy()
 
@@ -97,13 +106,14 @@ def preprocess_detection_result(result, polygon_zone):
 
     return frame, det
 
-def draw_and_write_frame(tracked_objs, frame, video_writer):
+def draw_and_write_frame(tracked_objs, frame, video_writer, line_points):
     """Process a single detection result, draws bbox, writes the frame
 
     Args:
         tracked_objs (ArrayLike): List of tracked objects [frame_id, x1, y1, x2, y2, track_id]
         frame (ArrayLike): The frame to write on
         video_writer (VideoWriter): A cv2 VideoWriter object
+        line_points (List): List of point of a line to draw on frame for counting, check crossing, ...
     """
     if tracked_objs.size > 0:
         for track in tracked_objs:
@@ -112,7 +122,7 @@ def draw_and_write_frame(tracked_objs, frame, video_writer):
             color = ((37 * track_id) % 255, (17 * track_id) % 255, (29 * track_id) % 255)
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
             cv2.putText(frame, f"ID: {track_id}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-
+    cv2.line(frame, line_points[0], line_points[1], color=(126, 0, 126), thickness=3)
     video_writer.write(frame)
     cv2.imshow("Tracking Results", frame)
 
