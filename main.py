@@ -3,7 +3,11 @@ from track.sort import SORT
 from track.bytetrack import ByteTrack
 from detect.detect import inference_video
 from track.utils import ciou, iou
-from utils import draw_and_write_frame, parse_args_tracking, handle_video_capture, handle_result_filename, select_zones, preprocess_detection_result
+from core.vehicle import Vehicle
+from utils.parse_args import parse_args_tracking
+from utils.drawing import select_zones, draw_and_write_frame
+from utils.io import handle_result_filename, handle_video_capture
+from detect.utils import preprocess_detection_result
 import cv2
 import numpy as np
 import supervision as sv
@@ -23,10 +27,10 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(args.output_dir, "csv"), exist_ok=True)
 
     if args.tracker == 'sort':
-        tracker_instance = SORT(cost_function=iou, max_age=60, min_hits=5, iou_threshold=0.5)
+        tracker_instance = SORT(cost_function=iou, max_age=60, min_hits=5, iou_threshold=0.5, tracker_class=Vehicle)
         conf_threshold = 0.25
     elif args.tracker == 'bytetrack':
-        tracker_instance = ByteTrack(cost_function=iou, max_age=60, min_hits=5, high_conf_threshold=0.5)
+        tracker_instance = ByteTrack(cost_function=iou, max_age=60, min_hits=5, high_conf_threshold=0.5, tracker_class=Vehicle)
         conf_threshold = 0.1
     else:
         raise ValueError(f"Unknown tracker: {args.tracker}")
@@ -44,6 +48,11 @@ if __name__ == "__main__":
     start, end = sv.Point(x=line_points[0][0], y = line_points[0][1]), sv.Point(x=line_points[1][0], y = line_points[1][1])
     line_zone = sv.LineZone(start=start, end=end)
 
+    # supervision annotator for visualization
+    box_annotator = sv.BoxAnnotator(thickness=2)
+    label_annotator = sv.LabelAnnotator(text_scale=0.5, text_padding=5)
+    line_zone_annotator = sv.LineZoneAnnotator()
+
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(video_result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
     cv2.namedWindow("Tracking Results", cv2.WINDOW_AUTOSIZE)
@@ -57,24 +66,41 @@ if __name__ == "__main__":
         stream=True,
         conf_threshold=conf_threshold
     )
-    final_results = []
+    csv_results = []
 
     for i, result in enumerate(dets):
         frame, det = preprocess_detection_result(result, polygon_zone)
 
         # Object tracking
         tracked_objs = tracker_instance.update(dets=det)
-        frame_id = np.full((len(tracked_objs), 1), i + 1)
-        tracked_objs = np.hstack((frame_id, tracked_objs)) # [frame_id, x1, y1, x2, y2, track_id]
-        
-        draw_and_write_frame(tracked_objs, frame, video_writer, line_points)
 
+        # Can optimize for better performance, now using 2 for loops for simplicity
+        states = [obj.get_state()[0] for obj in tracked_objs]
+        ids = [obj.id for obj in tracked_objs] 
+        cls_ids = [obj.class_id for obj in tracked_objs]
+        xyxy = np.array(states)
+        tracker_ids = np.array(ids)
+        tracker_cls_ids = np.array(cls_ids)
         # Line crossing check
-        tracked_objs = sv.Detections(xyxy=tracked_objs[:, 1:5], tracker_id=tracked_objs[:, -1])
-        crossed_in, crossed_out = line_zone.trigger(detections=tracked_objs)
-        print(line_zone.in_count, line_zone.out_count)
+        sv_detections = sv.Detections(xyxy=xyxy, tracker_id=tracker_ids, class_id=tracker_cls_ids)
+        crossed_in, crossed_out = line_zone.trigger(detections=sv_detections)
+        is_violated_mask = crossed_in | crossed_out
+        violation_indices = np.where(is_violated_mask)[0]
+        for idx in violation_indices:
+            if hasattr(tracked_objs[idx], 'mark_violation'):
+                tracked_objs[idx].mark_violation("Line Crossing", frame)
+        
+        draw_and_write_frame(tracked_objs, frame, sv_detections, line_zone, box_annotator, label_annotator, line_zone_annotator, video_writer)
 
-        final_results.extend(tracked_objs)
+        if args.save == "True":
+            frame_num = i + 1
+            for obj in tracked_objs:
+                x1, y1, x2, y2 = map(int, obj.get_state()[0])
+                t_id = int(obj.id)
+                violated = 1 if getattr(obj, 'has_violated', False) else 0
+
+                csv_results.append([frame_num, x1, y1, x2, y2, t_id, violated])
+        
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     
@@ -82,9 +108,12 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     # Save results to CSV
-    with open(csv_result_path, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerows(final_results)
+    if args.save == "True":
+        header = ["frame_id", "x1", "y1", "x2", "y2", "track_id", "violated"]
+        with open(csv_result_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(header)
+            writer.writerows(csv_results)
     print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
     print(FRAME_WIDTH, FRAME_HEIGHT, FPS)
-    print(len(final_results))
+    print(len(csv_results))

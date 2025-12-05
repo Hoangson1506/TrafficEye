@@ -1,6 +1,8 @@
 import os
 import shutil
 import configparser
+import supervision as sv
+import numpy as np
 
 CLASS_ID = 0
 
@@ -107,3 +109,31 @@ def generate_data_yaml(output_path, nc=1, names=None):
         f.write(f"val: images/val\n\n")
         f.write(f"nc: {nc}\n\n")
         f.write(f"names: {names}\n")
+
+
+def preprocess_detection_result(result, polygon_zone):
+    """Preprocess the YOLO/Roboflow detection result for tracking algorithm
+
+    Args:
+        result (ArrayLike): The detection result
+        polygon_zone (sv.PolygonZone): The region of interest to filter out detection results
+
+    Return:
+        frame (ArrayLike): The original frame
+        det (ArrayLike): The preprocessed detection result (x1, y1, x2, y2, conf, cls_id)
+    """
+    frame = result.orig_img.copy()
+
+    dets = sv.Detections.from_ultralytics(result)
+    mask = polygon_zone.trigger(detections=dets)
+    dets = dets[mask]
+    boxes = dets.xyxy
+    conf = dets.confidence
+    cls_id = dets.class_id
+
+    if boxes is not None and len(boxes) > 0:
+        det = np.hstack((boxes, conf.reshape(-1, 1), cls_id.reshape(-1, 1)))
+    else:
+        det = np.empty((0, 6))
+
+    return frame, det

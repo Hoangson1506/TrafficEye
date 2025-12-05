@@ -1,5 +1,5 @@
 from benchmark.metrics import evaluate
-from utils import parse_args_eval
+from utils.parse_args import parse_args_eval
 import numpy as np
 
 

@@ -1,12 +1,13 @@
 from track.utils import *
 from track.base_tracker import BaseTracker
+from track.kalman_box_tracker import KalmanBoxTracker
 
 class SORT(BaseTracker):
     """This is the SORT (Simple Online and Realtime Tracking) algorithm for Object Tracking
     """
 
-    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, iou_threshold=0.3):
-        super().__init__()
+    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, iou_threshold=0.3, tracker_class=KalmanBoxTracker):
+        super().__init__(tracker_class=tracker_class)
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold

@@ -6,7 +6,7 @@ class KalmanBoxTracker:
     This class represent the state of individual tracked object observed
     """
     count = 0
-    def __init__(self, bbox):
+    def __init__(self, bbox, class_id=-1, **kwargs):
         """
         Initialize a tracker using initial bounding box.
 
@@ -38,6 +38,7 @@ class KalmanBoxTracker:
 
         self.time_since_update = 0
         self.id = KalmanBoxTracker.count
+        self.class_id = class_id
         KalmanBoxTracker.count += 1
         self.history = []
         self.hits = 0
