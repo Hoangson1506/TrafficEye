@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     data_path = args.data_path
     model = YOLO(args.model, task='detect', verbose=True)
-    device = "cuda"
+    device = args.device
     np.random.seed(42)
 
     # Setup VideoWriter and display Window

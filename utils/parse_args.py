@@ -33,6 +33,12 @@ def parse_args_tracking():
         default='True',
         help='Save video if set to True, else do not save'
     )
+    parser.add_argument(
+        '--device', 
+        type=str, 
+        default='cuda', 
+        help='Used device to run tracking.'
+    )
     args = parser.parse_args()
     return args
 
