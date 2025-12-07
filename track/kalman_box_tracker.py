@@ -10,7 +10,7 @@ class KalmanBoxTracker:
         """
         Initialize a tracker using initial bounding box.
 
-        Args:
+        Args:   
             bbox (ArrayLike): (x1, y1, x2, y2)
         """
         self.kf = KalmanFilter(dim_x=7, dim_z=4)
@@ -26,13 +26,21 @@ class KalmanBoxTracker:
                               [0, 1, 0, 0, 0, 0, 0],
                               [0, 0, 1, 0, 0, 0, 0],
                               [0, 0, 0, 1, 0, 0, 0]])
+        
 
         self.kf.R[2:,2:] *= 10.
-        self.kf.P[4:,4:] *= 1000. # give high uncertainty to the unobservable initial velocities
+        self.kf.P[4:,4:] *= 1000. #give high uncertainty to the unobservable initial velocities
         self.kf.P *= 10.
-
         self.kf.Q[-1,-1] *= 0.01
         self.kf.Q[4:,4:] *= 0.01
+
+        # self.kf.R[2:,2:] *= 2.
+        # self.kf.R[:2, :2] *= 0.1
+        # self.kf.P[4:,4:] *= 1000. # give high uncertainty to the unobservable initial velocities
+        # self.kf.P *= 10.
+
+        # self.kf.Q[-1,-1] *= 0.02
+        # self.kf.Q[4:,4:] *= 0.02
 
         self.kf.x[:4] = convert_bbox_to_z(bbox)
 

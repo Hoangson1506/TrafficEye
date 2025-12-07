@@ -2,8 +2,8 @@ from track.kalman_box_tracker import KalmanBoxTracker
 import time
 
 class Vehicle(KalmanBoxTracker):
-    def __init__(self, bbox, class_id=None):
-        super().__init__(bbox)
+    def __init__(self, bbox, class_id=None, **kwargs):
+        super().__init__(bbox, **kwargs)
 
         self.class_id = int(class_id)
         self.has_violated = False

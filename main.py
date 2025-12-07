@@ -95,7 +95,7 @@ if __name__ == "__main__":
         if args.save == "True":
             frame_num = i + 1
             for obj in tracked_objs:
-                x1, y1, x2, y2 = map(int, obj.get_state()[0])
+                x1, y1, x2, y2 = map(float, obj.get_state()[0])
                 t_id = int(obj.id)
                 violated = 1 if getattr(obj, 'has_violated', False) else 0
 
@@ -109,10 +109,8 @@ if __name__ == "__main__":
 
     # Save results to CSV
     if args.save == "True":
-        header = ["frame_id", "x1", "y1", "x2", "y2", "track_id", "violated"]
         with open(csv_result_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(header)
             writer.writerows(csv_results)
     print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
     print(FRAME_WIDTH, FRAME_HEIGHT, FPS)

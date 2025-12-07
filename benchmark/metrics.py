@@ -7,7 +7,7 @@ def evaluate(pred_path, gt_path, min_vis=0, iou_threshold=0.5,
     gt_cols = ['frame', 'id', 'x', 'y', 'w', 'h', 'conf', 'class', 'visibility']
     gt_data = pd.read_csv(gt_path, names=gt_cols)
 
-    pred_cols = ['frame', 'x_topleft', 'y_topleft', 'x_bottomright', 'y_bottomright', 'id']
+    pred_cols = ['frame', 'x_topleft', 'y_topleft', 'x_bottomright', 'y_bottomright', 'id', 'has_violated']
     pred_data =pd.read_csv(pred_path, names=pred_cols)
     pred_data = convert_pred(pred_data)
 
