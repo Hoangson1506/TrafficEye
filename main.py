@@ -4,7 +4,7 @@ from track.bytetrack import ByteTrack
 from detect.detect import inference_video
 from core.vehicle import Vehicle
 from utils.parse_args import parse_args_tracking
-from utils.drawing import draw_polygon_zone, draw_line_zone, draw_and_write_frame
+from utils.drawing import draw_polygon_zone, draw_and_write_frame
 from utils.io import handle_result_filename, handle_video_capture
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
@@ -91,7 +91,7 @@ if __name__ == "__main__":
         stream=True,
         conf_threshold=conf_threshold,
         classes=config['detections']['classes'],
-        input_size=config['detections']['input_size'],
+        imgsz=config['detections']['imgsz'],
         iou_threshold=config['detections']['iou_threshold']
     )
     csv_results = []
