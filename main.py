@@ -2,7 +2,6 @@ from ultralytics import YOLO
 from track.sort import SORT
 from track.bytetrack import ByteTrack
 from detect.detect import inference_video
-from track.utils import ciou, iou
 from core.vehicle import Vehicle
 from utils.parse_args import parse_args_tracking
 from utils.drawing import draw_polygon_zone, draw_line_zone, draw_and_write_frame
@@ -10,6 +9,7 @@ from utils.io import handle_result_filename, handle_video_capture
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
 from core.violation_manager import ViolationManager
+from utils.config import load_config
 import cv2
 import numpy as np
 import supervision as sv
@@ -29,12 +29,35 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(args.output_dir, "video"), exist_ok=True)
     os.makedirs(os.path.join(args.output_dir, "csv"), exist_ok=True)
 
+    # Load config
+    config = load_config()
+    
+    # Override config with CLI args if provided (optional, but good practice)
+    # For now, we prioritize CLI args for tracker selection, but use config for params
+    
     if args.tracker == 'sort':
-        tracker_instance = SORT(cost_function=iou, max_age=60, min_hits=5, iou_threshold=0.5, tracker_class=Vehicle)
-        conf_threshold = 0.25
+        cfg = config['tracking']['sort']
+        tracker_instance = SORT(
+            cost_function=cfg['cost_function'], 
+            max_age=cfg['max_age'], 
+            min_hits=cfg['min_hits'], 
+            iou_threshold=cfg['iou_threshold'], 
+            tracker_class=Vehicle
+        )
+        conf_threshold = cfg['conf_threshold']
     elif args.tracker == 'bytetrack':
-        tracker_instance = ByteTrack(cost_function=iou, max_age=60, min_hits=5, high_conf_threshold=0.5, tracker_class=Vehicle)
-        conf_threshold = 0.1
+        cfg = config['tracking']['bytetrack']
+        tracker_instance = ByteTrack(
+            cost_function=cfg['cost_function'], 
+            max_age=cfg['max_age'], 
+            min_hits=cfg['min_hits'], 
+            high_conf_threshold=cfg['high_conf_threshold'], 
+            low_conf_threshold=cfg['low_conf_threshold'],
+            high_conf_iou_threshold=cfg['high_conf_iou_threshold'],
+            low_conf_iou_threshold=cfg['low_conf_iou_threshold'],
+            tracker_class=Vehicle
+        )
+        conf_threshold = cfg['conf_threshold']
     else:
         raise ValueError(f"Unknown tracker: {args.tracker}")
 
@@ -66,12 +89,16 @@ if __name__ == "__main__":
         output_path=None,
         device=device,
         stream=True,
-        conf_threshold=conf_threshold
+        conf_threshold=conf_threshold,
+        classes=config['detections']['classes'],
+        input_size=config['detections']['input_size'],
+        iou_threshold=config['detections']['iou_threshold']
     )
     csv_results = []
     
-    # Frame buffer for video proof (store last 5 seconds)
-    buffer_maxlen = int(FPS * 3)
+    # Frame buffer for video proof
+    buffer_duration = config['violation']['video_proof_duration']
+    buffer_maxlen = int(FPS * buffer_duration)
     frame_buffer = deque(maxlen=buffer_maxlen)
 
     # Set up violation manager and violation types

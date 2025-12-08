@@ -6,14 +6,13 @@ class SORT(BaseTracker):
     """This is the SORT (Simple Online and Realtime Tracking) algorithm for Object Tracking
     """
 
-    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, iou_threshold=0.3, tracker_class=KalmanBoxTracker):
-        super().__init__(tracker_class=tracker_class)
+    def __init__(self, cost_function="iou", max_age=1, min_hits=3, iou_threshold=0.3, tracker_class=KalmanBoxTracker):
+        super().__init__(tracker_class=tracker_class, cost_function=cost_function)
         self.max_age = max_age
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
         self.trackers = []
         self.frame_count = 0
-        self.cost_function = cost_function
     
     def _associate_detections_to_trackers(self, detections, trackers):
         """Assigns detections to tracked object

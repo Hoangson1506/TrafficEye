@@ -1,12 +1,19 @@
 from track.utils import *
 from track.kalman_box_tracker import KalmanBoxTracker
+from track.utils import iou, ciou, diou
 
 class BaseTracker:
     """This is the base class for Object Tracking algorithms.
     """
+    COST_FUNCTION = {
+        "iou": iou,
+        "ciou": ciou,
+        "diou": diou
+    }
 
-    def __init__(self, tracker_class=KalmanBoxTracker):
+    def __init__(self, tracker_class=KalmanBoxTracker, cost_function="iou"):
         self.tracker_class = tracker_class
+        self.cost_function = self.COST_FUNCTION[cost_function]
         pass
 
     def _associate_detections_to_trackers(self, detections, trackers):

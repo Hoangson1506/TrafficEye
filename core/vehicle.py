@@ -1,6 +1,10 @@
 from track.kalman_box_tracker import KalmanBoxTracker
 import time
 from utils.storage import MinioClient
+from utils.config import load_config
+
+# Load config once
+config = load_config()
 
 class Vehicle(KalmanBoxTracker):
     def __init__(self, bbox, class_id=None, **kwargs):
@@ -13,7 +17,9 @@ class Vehicle(KalmanBoxTracker):
         self.license_plate = None
         self.proof = [] # np.array (Crop images)
 
-    def mark_violation(self, violation_type, frame=None, padding=30, frame_buffer=None, fps=30):
+    def mark_violation(self, violation_type, frame=None, padding=None, frame_buffer=None, fps=30):
+        if padding is None:
+            padding = config['violation']['padding']
         if not self.has_violated:
             self.has_violated = True
             self.violation_type.append(violation_type)

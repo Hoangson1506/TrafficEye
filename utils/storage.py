@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 from io import BytesIO
 from datetime import datetime
+from dotenv import load_dotenv
 
 class MinioClient:
     _instance = None
@@ -16,6 +17,7 @@ class MinioClient:
         return cls._instance
 
     def _initialize(self):
+        load_dotenv()
         self.endpoint_url = "http://localhost:9000"
         self.access_key = "minioadmin"
         self.secret_key = "minioadmin"

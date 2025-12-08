@@ -6,20 +6,18 @@ class ByteTrack(BaseTracker):
     """This is the ByteTrack algorithm for Object Tracking
     """
 
-    def __init__(self, cost_function=ciou, max_age=1, min_hits=3, 
+    def __init__(self, cost_function="iou", max_age=1, min_hits=3, 
                  high_conf_iou_threshold=0.5, low_conf_iou_threshold=0.4,
                  high_conf_threshold=0.5, low_conf_threshold=0.1, tracker_class=KalmanBoxTracker):
-        super().__init__()
+        super().__init__(tracker_class=tracker_class, cost_function=cost_function)
         self.max_age = max_age
         self.min_hits = min_hits
         self.high_conf_iou_threshold = high_conf_iou_threshold
         self.low_conf_iou_threshold = low_conf_iou_threshold
         self.trackers = []
         self.frame_count = 0
-        self.cost_function = cost_function
         self.high_conf_threshold = high_conf_threshold
         self.low_conf_threshold = low_conf_threshold
-        self.tracker_class = tracker_class
 
     def _associate_detections_to_trackers(self, detections, trackers):
         if (len(trackers) == 0):

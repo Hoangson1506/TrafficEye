@@ -1,0 +1,29 @@
+dections:
+  conf_threshold: 0.25
+  iou_threshold: 0.5
+  classes: [0, 1, 2, 3, 4]  # Vehicle classes in COCO dataset (car, motorcycle, bus, truck)
+  input_size: 640
+
+tracking:
+  sort:
+    max_age: 60
+    min_hits: 5
+    iou_threshold: 0.5
+    conf_threshold: 0.25
+    cost_function: "iou"
+
+  bytetrack:
+    max_age: 60
+    min_hits: 5
+    high_conf_threshold: 0.5
+    low_conf_threshold: 0.1
+    high_conf_iou_threshold: 0.5
+    low_conf_iou_threshold: 0.4
+    conf_threshold: 0.1
+    cost_function: "iou"
+
+violation:
+  padding: 30
+  video_proof_duration: 3 # seconds
+  fps: 30 # Default FPS if not detected
+
