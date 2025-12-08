@@ -8,6 +8,8 @@ from utils.parse_args import parse_args_tracking
 from utils.drawing import draw_polygon_zone, draw_line_zone, draw_and_write_frame
 from utils.io import handle_result_filename, handle_video_capture
 from detect.utils import preprocess_detection_result
+from core.violation import RedLightViolation
+from core.violation_manager import ViolationManager
 import cv2
 import numpy as np
 import supervision as sv
@@ -41,13 +43,14 @@ if __name__ == "__main__":
     np.random.seed(42)
 
     # Setup VideoWriter and display Window
+    window_name = "Traffic Violation Detection"
     FRAME_WIDTH, FRAME_HEIGHT, FPS, first_frame, ret = handle_video_capture(data_path)
-    polygon_points = draw_polygon_zone(first_frame)
+    polygon_points = draw_polygon_zone(first_frame, window_name)
     polygon_points = np.array(polygon_points, dtype=int)
     polygon_zone = sv.PolygonZone(polygon_points)
-    line_points = draw_line_zone(first_frame)
-    start, end = sv.Point(x=line_points[0][0], y = line_points[0][1]), sv.Point(x=line_points[1][0], y = line_points[1][1])
-    line_zone = sv.LineZone(start=start, end=end)
+    # line_points = draw_line_zone(first_frame, window_name)
+    # start, end = sv.Point(x=line_points[0][0], y = line_points[0][1]), sv.Point(x=line_points[1][0], y = line_points[1][1])
+    # line_zone = sv.LineZone(start=start, end=end)
 
     # supervision annotator for visualization
     box_annotator = sv.BoxAnnotator(thickness=2)
@@ -56,7 +59,7 @@ if __name__ == "__main__":
 
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     video_writer = cv2.VideoWriter(video_result_path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
-    cv2.namedWindow("Tracking Results", cv2.WINDOW_AUTOSIZE)
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
 
     # Prepare detections
     dets = inference_video(
@@ -69,8 +72,12 @@ if __name__ == "__main__":
     )
     csv_results = []
 
+    # Set up violation manager and violation types
+    violations = [RedLightViolation(frame=first_frame, window_name=window_name)]
+    violation_manager = ViolationManager(violations=violations)
+
     for i, result in enumerate(dets):
-        frame, det = preprocess_detection_result(result, polygon_zone)
+        frame, det = preprocess_detection_result(result, None)
 
         # Object tracking
         tracked_objs = tracker_instance.update(dets=det)
@@ -79,19 +86,22 @@ if __name__ == "__main__":
         states = [obj.get_state()[0] for obj in tracked_objs]
         ids = [obj.id for obj in tracked_objs] 
         cls_ids = [obj.class_id for obj in tracked_objs]
-        xyxy = np.array(states)
-        tracker_ids = np.array(ids)
-        tracker_cls_ids = np.array(cls_ids)
-        # Line crossing check
-        sv_detections = sv.Detections(xyxy=xyxy, tracker_id=tracker_ids, class_id=tracker_cls_ids)
-        crossed_in, crossed_out = line_zone.trigger(detections=sv_detections)
-        is_violated_mask = crossed_in | crossed_out
-        violation_indices = np.where(is_violated_mask)[0]
-        for idx in violation_indices:
-            if hasattr(tracked_objs[idx], 'mark_violation'):
-                tracked_objs[idx].mark_violation("Line Crossing", frame)
+        if len(states) == 0:
+            sv_detections = sv.Detections.empty()
+        else:
+            xyxy = np.array(states)
+            tracker_ids = np.array(ids)
+            tracker_cls_ids = np.array(cls_ids)
+            sv_detections = sv.Detections(
+                xyxy=xyxy,
+                tracker_id=tracker_ids,
+                class_id=tracker_cls_ids
+            )
         
-        draw_and_write_frame(tracked_objs, frame, sv_detections, line_zone, box_annotator, label_annotator, line_zone_annotator, video_writer)
+        # Update violation manager
+        violation_manager.update(vehicles=tracked_objs, sv_detections=sv_detections, frame=frame)
+        
+        draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, video_writer)
 
         if args.save == "True":
             frame_num = i + 1

@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import supervision as sv
 
-def draw_polygon_zone(frame: np.ndarray):
+def draw_polygon_zone(frame: np.ndarray, window_name: str = "Traffic Violation Detection"):
     """
     Interactive mode to draw a Polygon Zone (Region of Interest, RoI).
     
@@ -27,7 +27,6 @@ def draw_polygon_zone(frame: np.ndarray):
             drawing_points.append((x, y))
             print(f"[{zone_name}] Point selected: ({x}, {y})")
 
-    window_name = f"Configuration: Draw {zone_name} -> Press 'n' to save"
     cv2.namedWindow(window_name)
     cv2.setMouseCallback(window_name, mouse_callback)
 
@@ -72,7 +71,7 @@ def draw_polygon_zone(frame: np.ndarray):
 
 # --- FUNCTION 2: DRAW LINE ZONE (Boundary Line) ---
 
-def draw_line_zone(frame: np.ndarray):
+def draw_line_zone(frame: np.ndarray, window_name: str = "Traffic Violation Detection"):
     """
     Interactive mode to draw a Line Zone (Boundary/Crossing Line).
     
@@ -97,7 +96,6 @@ def draw_line_zone(frame: np.ndarray):
                 drawing_points.append((x, y))
                 print(f"[{zone_name}] Point selected: ({x}, {y})")
 
-    window_name = f"Configuration: Draw {zone_name} -> Press 'q' to save"
     cv2.namedWindow(window_name)
     cv2.setMouseCallback(window_name, mouse_callback)
 
@@ -139,17 +137,15 @@ def draw_line_zone(frame: np.ndarray):
             return drawing_points
 
 
-def draw_and_write_frame(tracked_objs, frame, sv_detections, line_zone, box_annotator, label_annotator, line_zone_annotator, video_writer):
+def draw_and_write_frame(tracked_objs, frame, sv_detections, box_annotator, label_annotator, video_writer, window_name="Traffic Violation Detection"):
     """Process a single detection result, draws bbox, writes the frame
 
     Args:
         tracked_objs (KalmanBoxTracker): List of tracked objects 
         frame (ArrayLike): The frame to write on
         sv_detections (sv.Detections): Detections result in the supervision format
-        line_zone (sv.LineZone): supervision line zone
         box_annotator (sv.BoxAnnotator)
         label_annotator (sv.LabelAnnotator)
-        line_zone_annotator (sv.LineZoneAnnotator)
         video_writer (cv2.VideoWriter)
     """
     # violation_palette = sv.ColorPalette(colors=[sv.Color.GREEN, sv.Color.RED])
@@ -172,12 +168,12 @@ def draw_and_write_frame(tracked_objs, frame, sv_detections, line_zone, box_anno
         labels=labels
     )
 
-    line_zone_annotator.annotate(frame, line_counter=line_zone)
+    # line_zone_annotator.annotate(frame, line_counter=line_zone)
 
     if video_writer is not None:
         video_writer.write(frame)
 
-    cv2.imshow("Tracking Results", frame)
+    cv2.imshow(window_name, frame)
 
     # if len(tracked_objs) > 0:
     #     for tracker in tracked_objs:
