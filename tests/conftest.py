@@ -11,7 +11,19 @@ from utils.storage import MinioClient
 
 @pytest.fixture(scope="session")
 def minio_client():
-    return MinioClient()
+    client = MinioClient()
+    
+    # Ensure buckets exist for tests (crucial for CI/CD where MinIO is fresh)
+    for bucket_name in client.buckets.values():
+        try:
+            client.s3.head_bucket(Bucket=bucket_name)
+        except Exception:
+            try:
+                client.s3.create_bucket(Bucket=bucket_name)
+            except Exception as e:
+                print(f"Warning: Could not create bucket {bucket_name}: {e}")
+                
+    return client
 
 @pytest.fixture
 def dummy_frame():
