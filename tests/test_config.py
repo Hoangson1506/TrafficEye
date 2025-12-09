@@ -26,6 +26,6 @@ def test_default_config_exists():
     # Verify that the actual config.yaml exists and can be loaded
     assert os.path.exists("config.yaml")
     config = load_config("config.yaml")
-    assert 'detection' in config
+    assert 'detections' in config
     assert 'tracking' in config
     assert 'violation' in config

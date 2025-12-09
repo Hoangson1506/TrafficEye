@@ -5,7 +5,7 @@ from detect.detect import inference_video
 from core.vehicle import Vehicle
 from utils.parse_args import parse_args_tracking
 from utils.drawing import draw_polygon_zone, draw_and_write_frame
-from utils.io import handle_result_filename, handle_video_capture
+from utils.io import handle_result_filename, handle_video_capture, violation_save_worker
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
 from core.violation_manager import ViolationManager
@@ -17,39 +17,8 @@ import os
 import csv
 import threading
 import queue
-from utils.storage import MinioClient
 from collections import deque
 
-def violation_save_worker(save_queue):
-    client = MinioClient()
-
-    while True:
-        data = save_queue.get()
-        if data is None: # The None data is just a way to stop the worker
-            break
-
-        try:
-            vehicle_id = data['vehicle_id']
-            identifier = data['identifier'] # license plate or vehicle id
-            violation_type = data['violation_type']
-            frame = data['frame']
-            bbox = data['bbox']
-            frame_buffer = data['frame_buffer']
-            fps = data['fps']
-            proof_crop = data['proof_crop']
-
-            client.save_proof(proof_crop, identifier, violation_type)
-            client.save_retraining_data(frame, vehicle_id, bbox)
-            client.save_retraining_data(frame, identifier, violation_type, bbox)
-            
-            if frame_buffer:
-                client.save_video_proof(frame_buffer, identifier, violation_type, fps)
-            
-            print(f"[Worker] Saved violation for ID: {identifier}")
-        except Exception as e:
-            print(f"[Worker] Error saving violation: {e}")
-        finally:
-            save_queue.task_done()
 
 if __name__ == "__main__":
     args = parse_args_tracking()
