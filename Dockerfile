@@ -27,6 +27,9 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN python -m pip install paddlepaddle==3.2.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/ 
+RUN python -m pip install paddleocr
+
 # Copy requirements file
 COPY requirements.txt .
 

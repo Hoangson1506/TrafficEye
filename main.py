@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+from paddleocr import PaddleOCR
 from track.sort import SORT
 from track.bytetrack import ByteTrack
 from detect.detect import inference_video
@@ -9,6 +10,7 @@ from utils.io import handle_result_filename, violation_save_worker
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
 from core.violation_manager import ViolationManager
+from core.license_plate_recognizer import LicensePlateRecognizer
 from utils.config import load_config
 import cv2
 import numpy as np
@@ -69,7 +71,11 @@ def main():
         raise ValueError(f"Unknown tracker: {args.tracker}")
 
     data_path = args.data_path
-    model = YOLO(args.model, task='detect', verbose=True)
+    vehicle_model = YOLO(args.vehicle_model, task='detect', verbose=True)
+    license_model = YOLO(args.license_model, task='detect', verbose=True)
+    # character_model = YOLO(args.character_model, task='detect', verbose=True)
+    character_model = PaddleOCR(use_angle_cls=True, lang='en')
+    
     device = args.device
     violation_queue = queue.Queue()
     worker_thread = threading.Thread(target=violation_save_worker,args=(violation_queue,), daemon=True)
@@ -85,7 +91,7 @@ def main():
 
     # Prepare detections
     dets = inference_video(
-        model=model,
+        model=vehicle_model,
         data_path=data_path,
         output_path=None,
         device=device,
@@ -118,7 +124,8 @@ def main():
 
             # Set up violation manager and violation types
             violations = [RedLightViolation(frame=first_frame, window_name=window_name)]
-            violation_manager = ViolationManager(violations=violations)
+            licensePlate_recognizer = LicensePlateRecognizer(license_model=license_model, character_model=character_model)
+            violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
             first_run = False
 
         frame, det = preprocess_detection_result(result, polygon_zone)

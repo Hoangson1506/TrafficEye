@@ -30,30 +30,29 @@ services:
       /usr/bin/mc anonymous set public myminio/models; 
       exit 0; "
 
-#   traffic-monitor:
-#     build: .
-#     container_name: traffic-monitor
-#     depends_on:
-#       createbuckets:
-#         condition: service_completed_successfully
-#     volumes:
-#       - ./data:/app/data
-#       - ./output:/app/output
-#       - /tmp/.X11-unix:/tmp/.X11-unix
-#     environment:
-#       - DISPLAY=${DISPLAY}
-#       - MINIO_ENDPOINT=http://minio:9000
-#       - MINIO_ACCESS_KEY=minioadmin
-#       - MINIO_SECRET_KEY=minioadmin
-#     deploy:
-#       resources:
-#         reservations:
-#           devices:
-#             - driver: nvidia
-#               count: 1
-#               capabilities: [gpu]
-#     stdin_open: true # docker run -i
-#     tty: true        # docker run -t
+  traffic-monitor:
+    build: .
+    container_name: traffic-monitor
+    depends_on:
+      createbuckets:
+        condition: service_completed_successfully
+    volumes:
+      - ./:/app
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    stdin_open: true # docker run -i
+    tty: true        # docker run -t
 
 # networks:
 #   default:
