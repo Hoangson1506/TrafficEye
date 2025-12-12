@@ -5,14 +5,26 @@ def parse_args_tracking():
     parser.add_argument(
         '--data_path', 
         type=str, 
-        default="data/MOT16 test video/MOT16-01-raw.mp4",
+        default="data/traffic_video.mp4",
         help='Path to the input video file (e.g., data/video.mp4).'
     )
     parser.add_argument(
-        "--model",
+        "--vehicle_model",
         type=str,
-        default="yolo12n.pt",
-        help="Path to detection model weights."
+        default="detect_gtvn.pt",
+        help="Path to vehicle detection model weights."
+    )
+    parser.add_argument(
+        "--license_model",
+        type=str,
+        default="lp_yolo11s.pt",
+        help="Path to license detection model weights."
+    )
+    parser.add_argument(
+        "--character_model",
+        type=str,
+        default="yolo11s.pt",
+        help="Path to character detection model weights."
     )
     parser.add_argument(
         '--tracker', 
