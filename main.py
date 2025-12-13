@@ -73,8 +73,8 @@ def main():
         raise ValueError(f"Unknown tracker: {args.tracker}")
 
     data_path = args.data_path
-    vehicle_model = YOLO(args.vehicle_model, task='detect', verbose=True)
-    license_model = YOLO(args.license_model, task='detect', verbose=True)
+    vehicle_model = YOLO(args.vehicle_model, task='detect', verbose=False)
+    license_model = YOLO(args.license_model, task='detect', verbose=False)
     # character_model = YOLO(args.character_model, task='detect', verbose=True)
     character_model = PaddleOCR(use_angle_cls=True, lang='en')
     
@@ -102,7 +102,8 @@ def main():
         classes=config['detections']['classes'],
         imgsz=config['detections']['imgsz'],
         iou_threshold=config['detections']['iou_threshold'],
-        stream_buffer=False
+        stream_buffer=False,
+        verbose=False
     )
     csv_results = []
 
@@ -138,7 +139,7 @@ def main():
         tracked_objs = tracker_instance.update(dets=det)
         all_tracked_objs = tracker_instance.get_tracked_objects()
 
-        # Can optimize for better performance, now using 2 for loops for simplicity
+        # Prepare detections in supervision format
         states = [obj.get_state()[0] for obj in tracked_objs]
         ids = [obj.id for obj in tracked_objs] 
         cls_ids = [obj.class_id for obj in tracked_objs]
@@ -154,10 +155,11 @@ def main():
                 class_id=tracker_cls_ids
             )
 
+        # Filter vehicles inside polygon zone
         in_zone_mask = polygon_zone.trigger(detections=sv_detections)
 
         for obj in all_tracked_objs:
-            if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
+            if obj.is_being_tracked == False and sv_detections.tracker_id is not None and obj.id in sv_detections.tracker_id[in_zone_mask]:
                 obj.is_being_tracked = True
             if obj.bboxes_buffer is not None:
                 obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
@@ -175,7 +177,8 @@ def main():
         # Update violation manager
         violation_manager.update(vehicles=visualized_tracked_objs, sv_detections=visualized_sv_detections, frame=frame, traffic_light_state=[None, 'RED', 'RED'], frame_buffer=frame_buffer, fps=FPS, save_queue=violation_queue)
         
-        render_frame(visualized_tracked_objs, frame, visualized_sv_detections, box_annotator, label_annotator)
+        frame = render_frame(visualized_tracked_objs, frame, visualized_sv_detections, box_annotator, label_annotator)
+        cv2.imshow(window_name, frame)
 
         if args.save == "True":
             frame_num = i + 1

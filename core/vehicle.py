@@ -55,7 +55,7 @@ class Vehicle(KalmanBoxTracker):
         final_lp = self.update_license_plate(candidate_lp)
 
         if final_lp is None:
-            return  # Wait until 3 votes
+            final_lp = "UNIDENTIFIED"
 
         if self.has_violated is True:
             self.has_violated = None

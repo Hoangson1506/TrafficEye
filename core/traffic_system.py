@@ -6,6 +6,7 @@ import queue
 import threading
 from ultralytics import YOLO
 from paddleocr import PaddleOCR
+import cv2
 
 from track.sort import SORT
 from track.bytetrack import ByteTrack
@@ -105,7 +106,7 @@ class TrafficSystem:
         """Capture a single frame from the source for setting up zones."""
         if self.first_frame is None:
             return None
-        return self.first_frame
+        return cv2.cvtColor(self.first_frame, cv2.COLOR_BGR2RGB)
 
     def start(self):
         self.running = True
@@ -114,6 +115,25 @@ class TrafficSystem:
     def stop(self):
         self.running = False
         self.generator = None
+
+    def filter_vehicles_in_zone(self, tracked_objs, sv_detections, frame_counter=0, buffer_maxlen=5):
+        # Trigger zones
+        in_zone_mask = self.polygon_zone.trigger(detections=sv_detections)
+
+        for obj in tracked_objs:
+            if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
+                obj.is_being_tracked = True
+            if obj.bboxes_buffer is not None:
+                obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
+            else:
+                obj.bboxes_buffer = deque(maxlen=buffer_maxlen)
+                obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
+
+        visualized_tracked_objs = [obj for obj in tracked_objs if obj.is_being_tracked]
+        visualize_mask = np.isin(sv_detections.tracker_id, [obj.id for obj in visualized_tracked_objs])
+        visualized_sv_detections = sv_detections[visualize_mask]
+
+        return visualized_tracked_objs, visualized_sv_detections
 
     def _process_flow(self):
         # Setup source
@@ -178,13 +198,16 @@ class TrafficSystem:
                 licensePlate_recognizer = LicensePlateRecognizer(license_model=self.license_model, character_model=self.character_model)
                 self.violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
                 
+                frame_counter = 0
                 first_run = False
             
             # Preprocess
             frame, det = preprocess_detection_result(result)
+            frame_counter += 1
             
             # Tracking
             tracked_objs = self.tracker_instance.update(dets=det)
+            all_tracked_objs = self.tracker_instance.get_tracked_objects()
             
             states = [obj.get_state()[0] for obj in tracked_objs]
             ids = [obj.id for obj in tracked_objs] 
@@ -202,18 +225,10 @@ class TrafficSystem:
                     class_id=tracker_cls_ids
                 )
             
-            # Trigger zones
-            in_zone_mask = self.polygon_zone.trigger(detections=sv_detections)
-            for obj in tracked_objs:
-                if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
-                    obj.is_being_tracked = True
-            
-            visualized_tracked_objs = [obj for obj in tracked_objs if obj.is_being_tracked]
-            visualize_mask = np.isin(sv_detections.tracker_id, [obj.id for obj in visualized_tracked_objs])
-            visualized_sv_detections = sv_detections[visualize_mask]
-            
+            visualized_tracked_objs, visualized_sv_detections = self.filter_vehicles_in_zone(all_tracked_objs, sv_detections, frame_counter, buffer_maxlen)
+
             # Update frame buffer
-            frame_buffer.append(frame.copy())
+            frame_buffer.append((frame_counter, frame.copy()))
             
             # Violation Update
             # Using mock traffic light for now, or we can add logic to detect it
@@ -229,6 +244,7 @@ class TrafficSystem:
             
             # Draw
             annotated_frame = render_frame(visualized_tracked_objs, frame, visualized_sv_detections, self.box_annotator, self.label_annotator)
+            annotated_frame = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
             
             yield annotated_frame, stats
 
