@@ -39,6 +39,8 @@ def violation_save_worker(save_queue):
 
     while True:
         data = save_queue.get()
+        if data is None: # Nhận tín hiệu dừng
+            break
         if data is None: # The None data is just a way to stop the worker
             break
 

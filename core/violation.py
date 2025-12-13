@@ -153,23 +153,24 @@ class RedLightViolation(Violation):
         Args:
             frame (np.ndarray): Frame to draw the line on
         """
-        violation_line_points, special_violation_line_points, left_exception_line_points, right_exception_line_points, other_exception_line_points = draw_line_zone(frame, window_name)
-        for i in range(0, len(violation_line_points), 2):
-            start, end = sv.Point(x=violation_line_points[i][0], y = violation_line_points[i][1]), sv.Point(x=violation_line_points[i+1][0], y = violation_line_points[i+1][1])
-            self.violation_lines.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
-        
-        for i in range(0, len(special_violation_line_points), 2):
-            start, end = sv.Point(x=special_violation_line_points[i][0], y = special_violation_line_points[i][1]), sv.Point(x=special_violation_line_points[i+1][0], y = special_violation_line_points[i+1][1])
-            self.special_violation_lines.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
+        # Define categories to draw: (attribute_name, zone_display_name)
+        categories = [
+            ("violation_lines", "Violation Lines"),
+            ("special_violation_lines", "Special Violation Lines"),
+            ("left_exception_lines", "Left Turn Exception Lines"),
+            ("right_exception_lines", "Right Turn Exception Lines"),
+            ("other_exception_lines", "Other Exception Lines")
+        ]
 
-        for i in range(0, len(left_exception_line_points), 2):
-            start, end = sv.Point(x=left_exception_line_points[i][0], y = left_exception_line_points[i][1]), sv.Point(x=left_exception_line_points[i+1][0], y = left_exception_line_points[i+1][1])
-            self.exception_lines.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
-
-        for i in range(0, len(right_exception_line_points), 2):
-            start, end = sv.Point(x=right_exception_line_points[i][0], y = right_exception_line_points[i][1]), sv.Point(x=right_exception_line_points[i+1][0], y = right_exception_line_points[i+1][1])
-            self.right_exception_lines.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
-
-        for i in range(0, len(other_exception_line_points), 2):
-            start, end = sv.Point(x=other_exception_line_points[i][0], y = other_exception_line_points[i][1]), sv.Point(x=other_exception_line_points[i+1][0], y = other_exception_line_points[i+1][1])
-            self.other_exception_lines.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))
+        for attr_name, zone_name in categories:
+            # Draw lines for the current category
+            points = draw_line_zone(frame, zone_name=zone_name, window_name=window_name)
+            
+            # Get the target list from the instance
+            target_list = getattr(self, attr_name)
+            
+            # Convert points to sv.LineZone and append to the list
+            for i in range(0, len(points), 2):
+                start = sv.Point(x=points[i][0], y=points[i][1])
+                end = sv.Point(x=points[i+1][0], y=points[i+1][1])
+                target_list.append(sv.LineZone(start=start, end=end, triggering_anchors=[sv.Position.CENTER]))

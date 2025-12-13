@@ -25,6 +25,7 @@ import line_profiler
 @line_profiler.profile
 def main():
     os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp"
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     args = parse_args_tracking()
 
     # Prepare output paths
@@ -177,6 +178,14 @@ def main():
         
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
+    # 1. Gửi tín hiệu dừng cho worker (Sentinel value)
+    violation_queue.put(None) 
+    
+    # 2. Đợi worker lưu nốt dữ liệu còn tồn đọng
+    print("-> Đang lưu dữ liệu còn lại, vui lòng đợi...")
+    worker_thread.join()
+    print("-> Đã lưu xong toàn bộ.")
     
     cv2.destroyAllWindows()
 
@@ -185,7 +194,7 @@ def main():
         with open(csv_result_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerows(csv_results)
-    print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
+        print(f"Tracking results succesfully saved to {video_result_path} and {csv_result_path}")
     print(FRAME_WIDTH, FRAME_HEIGHT, FPS)
     print(len(csv_results))
 
