@@ -79,6 +79,80 @@ def draw_polygon_zone(frame: np.ndarray, window_name: str = "Traffic Violation D
             print(f"[{zone_name}] Polygon saved with {len(drawing_points)} points.")
             cv2.destroyWindow(window_name)
             return drawing_points
+        
+def draw_light_zone(frame: np.ndarray, zone_name: str = "LIGHT_ZONE", window_name: str = "Traffic Violation Detection"):
+    """
+    Interactive mode to draw a Light Zone (Traffic Light Area).
+    
+    The user uses mouse clicks to define a rectangular area.
+    Press 's' to save the rectangle. Press 'ESC' to cancel.
+
+    Args:
+        frame (np.ndarray): The video frame used as the canvas.
+        zone_name (str): Name of the zone type being drawn (e.g. "Left Traffic Light Zone")
+
+    Return:
+        drawing_points: A list of 2 points defining the rectangle [top-left, bottom-right]. 
+                        Returns [] if cancelled.
+    """
+    
+    drawing_points = []
+    
+    def mouse_callback(event, x, y, flags, param):
+        nonlocal drawing_points
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drawing_points.append((x, y))
+            print(f"[{zone_name}] Point selected: ({x}, {y})")
+
+    cv2.namedWindow(window_name, cv2.WND_PROP_FULLSCREEN)
+    cv2.setMouseCallback(window_name, mouse_callback)
+
+    print(f"\n--- [TUTORIAL] {zone_name} ---")
+    print("1. Left mouse click to choose 2 points (Top-Left and Bottom-Right) for the RECTANGLE")
+    print("2. Press 'r' to revert back 1 point")
+    print("3. Press 'ESC' to cancel (Returns empty list)")
+    print("4. Press 's' to save the rectangle and finish.")
+
+    while True:
+        display_frame = frame.copy()
+
+        # Draw selected points into rectangle. There can be multiple rectangles.
+        for i in range(0, len(drawing_points), 2):
+            if i + 1 < len(drawing_points):
+                cv2.rectangle(display_frame, drawing_points[i], drawing_points[i + 1], (0, 255, 0), 2)
+
+        # Draw the rectangle if 2 points are selected
+        if len(drawing_points) == 2:
+            cv2.rectangle(display_frame, drawing_points[0], drawing_points[1], (0, 255, 0), 2)
+
+        cv2.putText(display_frame,
+                    f"MODE: {zone_name} | Points: {len(drawing_points)}",
+                    (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
+                    (255, 255, 0), 2)
+        cv2.imshow(window_name, display_frame)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == 27: # ESC
+            print(f"ESC pressed → {zone_name} cancelled")
+            cv2.destroyWindow(window_name)
+            return []
+        if key == ord('r'):
+            if len(drawing_points) > 0:
+                removed_point = drawing_points.pop()
+                print(f"[{zone_name}] Removed last point: {removed_point}")
+            else:
+                print(f"[{zone_name}] No points to remove!")
+
+        if key == ord('s'):
+            # only straight zones need exactly 2 points, the others may not exist
+            if len(drawing_points) < 2 and zone_name == "Straight Light Signal Zones":
+                print(f"[{zone_name}] Requires exactly 2 points for a rectangle!")
+            elif len(drawing_points) % 2 != 0:
+                print(f"[{zone_name}] Requires even number of points for rectangles!")
+            else:
+                print(f"[{zone_name}] Rectangle saved.")
+                cv2.destroyWindow(window_name)
+                return drawing_points
 
 
 def draw_line_zone(frame: np.ndarray, zone_name: str = "LINE_ZONE", window_name: str = "Traffic Violation Detection"):
@@ -168,7 +242,7 @@ def render_frame(tracked_objs, frame, sv_detections, box_annotator, label_annota
         detections=sv_detections
     )
 
-    labels = [f"ID: {obj.id} {'[VIOLATION]' if obj.has_violated else ''}" for obj in tracked_objs]
+    labels = [f"ID: {obj.id} {'[VIOLATION]' if len(obj.violation_type) > 0 else ''}" for obj in tracked_objs]
     frame = label_annotator.annotate(
         scene=frame,
         detections=sv_detections,

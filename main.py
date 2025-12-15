@@ -11,6 +11,8 @@ from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
 from core.violation_manager import ViolationManager
 from core.license_plate_recognizer import LicensePlateRecognizer
+from core.light_signal_detector import LightSignalDetector
+from core.light_signal_FSM import LightSignalFSM
 from utils.config import load_config
 import cv2
 import numpy as np
@@ -130,6 +132,20 @@ def main():
             violations = [RedLightViolation(polygon_points=polygon_points, frame=first_frame, window_name=window_name)]
             licensePlate_recognizer = LicensePlateRecognizer(license_model=license_model, character_model=character_model)
             violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
+
+            # set up light signal FSMs
+            if args.light_detect:
+                light_detector = LightSignalDetector(frame=first_frame, window_name=window_name)
+                initial_light_list = light_detector.detect_light_signals(first_frame)
+                processed_initial_lights = []
+                for light in initial_light_list:
+                    if light is None:
+                        processed_initial_lights.append(light)
+                    else:
+                        processed_initial_lights.append(light[0])  # Extract only the state
+
+                light_fsm = LightSignalFSM(initial_states=processed_initial_lights)
+
             first_run = False
 
         frame, det = preprocess_detection_result(result)
@@ -174,8 +190,17 @@ def main():
         # Update frame buffer
         frame_buffer.append((frame_counter, frame.copy()))
 
+        # Update light signal FSMs
+        if args.light_detect:
+            detected_lights = light_detector.detect_light_signals(frame)
+            traffic_light_states = light_fsm.update(candidates=detected_lights, frame_idx=frame_counter)
+        else:
+            # This means the tracking is part of a larger system where traffic light states are provided externally
+            # For now, we set them to None RED None
+            traffic_light_states = [None, 'RED', None]
+
         # Update violation manager
-        violation_manager.update(vehicles=visualized_tracked_objs, sv_detections=visualized_sv_detections, frame=frame, traffic_light_state=[None, 'RED', 'RED'], frame_buffer=frame_buffer, fps=FPS, save_queue=violation_queue)
+        violation_manager.update(vehicles=visualized_tracked_objs, sv_detections=visualized_sv_detections, frame=frame, traffic_light_state=traffic_light_states, frame_buffer=frame_buffer, fps=FPS, save_queue=violation_queue)
         
         frame = render_frame(visualized_tracked_objs, frame, visualized_sv_detections, box_annotator, label_annotator)
         cv2.imshow(window_name, frame)

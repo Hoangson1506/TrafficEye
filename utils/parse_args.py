@@ -51,6 +51,12 @@ def parse_args_tracking():
         default='cuda', 
         help='Used device to run tracking.'
     )
+    parser.add_argument(
+        '--light_detect',
+        type=bool,
+        default=True,
+        help='Enable traffic light detection.'
+    )
     args = parser.parse_args()
     return args
 
