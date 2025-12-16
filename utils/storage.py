@@ -174,7 +174,9 @@ class MinioClient:
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
                     else:
                         # No bbox for this frame, draw using last known bbox
-                        bbox = bbox_map.get(max([k for k in bbox_map.keys() if k <= frame_counter]), None)
+                        previous = [k for k in bbox_map.keys() if k <= frame_counter]
+                        if len(previous) > 0:
+                            bbox = bbox_map.get(max(), None)
                         if bbox:
                             x1, y1, x2, y2 = map(int, bbox)
                             cv2.rectangle(draw_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)

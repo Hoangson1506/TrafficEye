@@ -11,7 +11,7 @@ class LightSignalFSM:
         'YELLOW': ['RED']
     }
 
-    def __init__(self, initial_states=[None, 'RED', None], confirm_frames=5, strength_threshold=50):
+    def __init__(self, initial_states=[None, 'RED', None], confirm_frames=3, strength_threshold=15):
         self.states = initial_states.copy()
         self.candiate_states = initial_states.copy()
         self.states_frame_count = [0, 0, 0]
@@ -51,4 +51,7 @@ class LightSignalFSM:
                         self.last_change_frames[i] = frame_idx
                     self.states_frame_count[i] = 0
 
+        return self.states
+    
+    def get_states(self):
         return self.states

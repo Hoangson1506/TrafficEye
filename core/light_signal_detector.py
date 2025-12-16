@@ -34,14 +34,12 @@ class LightSignalDetector:
 
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        red1 = cv2.inRange(hsv, (0, 100, 120), (10, 255, 255))
-        red2 = cv2.inRange(hsv, (160, 100, 120), (180, 255, 255))
+        red1 = cv2.inRange(hsv, (0, 20, 50), (30, 255, 255))
+        red2 = cv2.inRange(hsv, (160, 20, 50), (180, 255, 255))
+
         red_mask = cv2.bitwise_or(red1, red2)
 
-        yellow1 = cv2.inRange(hsv, (5, 30, 120), (25, 255, 255))
-        yellow2 = cv2.inRange(hsv, (25, 30, 120), (55, 255, 255))
-
-        yellow_mask = cv2.bitwise_or(yellow1, yellow2)
+        yellow_mask = cv2.inRange(hsv, (20, 70, 50), (35, 255, 255))
 
         green_mask = cv2.inRange(hsv, (55, 70, 120), (95, 255, 255))
 

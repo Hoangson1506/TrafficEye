@@ -134,7 +134,7 @@ def main():
             violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
 
             # set up light signal FSMs
-            if args.light_detect:
+            if args.light_detect == 'True':
                 light_detector = LightSignalDetector(frame=first_frame, window_name=window_name)
                 initial_light_list = light_detector.detect_light_signals(first_frame)
                 processed_initial_lights = []
@@ -191,9 +191,13 @@ def main():
         frame_buffer.append((frame_counter, frame.copy()))
 
         # Update light signal FSMs
-        if args.light_detect:
-            detected_lights = light_detector.detect_light_signals(frame)
-            traffic_light_states = light_fsm.update(candidates=detected_lights, frame_idx=frame_counter)
+        if args.light_detect == 'True':
+            # to improve FPS, as heavy masking is quite costly (masking every frame drops the FPS to about 13)
+            if frame_counter % 5 == 0:
+                detected_lights = light_detector.detect_light_signals(frame)
+                traffic_light_states = light_fsm.update(candidates=detected_lights, frame_idx=frame_counter)
+            else:
+                traffic_light_states = light_fsm.get_states()
         else:
             # This means the tracking is part of a larger system where traffic light states are provided externally
             # For now, we set them to None RED None

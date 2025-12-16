@@ -53,8 +53,9 @@ def parse_args_tracking():
     )
     parser.add_argument(
         '--light_detect',
-        type=bool,
-        default=True,
+        type=str,
+        default='True',
+        choices=['True', 'False'],
         help='Enable traffic light detection.'
     )
     args = parser.parse_args()
