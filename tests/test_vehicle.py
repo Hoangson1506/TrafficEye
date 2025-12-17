@@ -21,9 +21,10 @@ def test_vehicle_mark_violation(dummy_bbox, dummy_frame):
     vehicle.vote_threshold = 1
     vehicle.has_violated = True
     
-    # Mark violation
-    dummy_buffer = [dummy_frame for _ in range(5)]
-    vehicle.mark_violation("RedLight", mock_recognizer, frame=dummy_frame, frame_buffer=dummy_buffer, fps=10)
+    # Mark violation - passing state (bbox) which is required when frame is provided
+    dummy_buffer = [(i, dummy_frame) for i in range(5)]
+    state = dummy_bbox  # [x1, y1, x2, y2]
+    vehicle.mark_violation("RedLight", mock_recognizer, frame=dummy_frame, frame_buffer=dummy_buffer, fps=10, state=state)
     
     assert vehicle.has_violated is None
     assert "RedLight" in vehicle.violation_type

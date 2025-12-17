@@ -11,7 +11,7 @@ class LicensePlateRecognizer:
         self.license_model = license_model
         self.character_model = character_model
 
-    def update(self, vehicle, frame, state):
+    def update(self, frame, state):
         """
         Detect + OCR license plate for a single vehicle
         Returns candidate license plate string (NOT final)

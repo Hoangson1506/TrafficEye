@@ -20,6 +20,8 @@ from utils.io import violation_save_worker
 from detect.utils import preprocess_detection_result
 from utils.zones import load_zones
 from utils.drawing import render_frame
+from core.light_signal_detector import LightSignalDetector
+from core.light_signal_FSM import LightSignalFSM
 
 class TrafficSystem:
     def __init__(self, config_path="config.yaml"):
@@ -34,8 +36,8 @@ class TrafficSystem:
         self.license_model_path = self.config.get('system', {}).get('license_model', "lp_yolo11s.pt")
         # self.character_model_path = self.config.get('system', {}).get('character_model', "yolo11s.pt") # Unused?
         
-        self.vehicle_model = YOLO(self.vehicle_model_path, task='detect')
-        self.license_model = YOLO(self.license_model_path, task='detect')
+        self.vehicle_model = YOLO(self.vehicle_model_path, task='detect', verbose=False)
+        self.license_model = YOLO(self.license_model_path, task='detect', verbose=False)
         self.character_model = PaddleOCR(use_angle_cls=True, lang='en')
         
         self.tracker_instance = None
@@ -116,12 +118,12 @@ class TrafficSystem:
         self.running = False
         self.generator = None
 
-    def filter_vehicles_in_zone(self, tracked_objs, sv_detections, frame_counter=0, buffer_maxlen=5):
+    def filter_vehicles_in_zone(self, tracked_objs, all_tracked_objs, sv_detections, frame_counter=0, buffer_maxlen=5):
         # Trigger zones
         in_zone_mask = self.polygon_zone.trigger(detections=sv_detections)
 
-        for obj in tracked_objs:
-            if obj.is_being_tracked == False and obj.id in sv_detections.tracker_id[in_zone_mask]:
+        for obj in all_tracked_objs:
+            if obj.is_being_tracked == False and sv_detections.tracker_id is not None and obj.id in sv_detections.tracker_id[in_zone_mask]:
                 obj.is_being_tracked = True
             if obj.bboxes_buffer is not None:
                 obj.bboxes_buffer.append((frame_counter, obj.get_state()[0]))
@@ -134,6 +136,51 @@ class TrafficSystem:
         visualized_sv_detections = sv_detections[visualize_mask]
 
         return visualized_tracked_objs, visualized_sv_detections
+
+    def _init_light_detector(self, h, w, light_zones_config):
+        """
+        Initialize LightSignalDetector from saved zone configuration.
+        Returns None if no zones are configured.
+        """
+        # Check if any zones are configured
+        has_zones = False
+        for direction in ['straight', 'left', 'right']:
+            if light_zones_config.get(direction, []):
+                has_zones = True
+                break
+        
+        if not has_zones:
+            return None
+        
+        # Create detector without interactive drawing
+        detector = LightSignalDetector.__new__(LightSignalDetector)
+        detector.straight_light_zones = []
+        detector.left_light_zones = []
+        detector.right_light_zones = []
+        detector.zone_masks = {'straight': [], 'left': [], 'right': []}
+        
+        # Load zones from config (points are stored as [top_left, bottom_right] pairs)
+        for direction in ['straight', 'left', 'right']:
+            points = light_zones_config.get(direction, [])
+            zone_list = getattr(detector, f'{direction}_light_zones')
+            
+            for i in range(0, len(points), 2):
+                if i + 1 < len(points):
+                    top_left = points[i]
+                    bottom_right = points[i + 1]
+                    # Convert 2 corner points to 4-point polygon
+                    polygon = [
+                        (top_left[0], top_left[1]),
+                        (bottom_right[0], top_left[1]),
+                        (bottom_right[0], bottom_right[1]),
+                        (top_left[0], bottom_right[1])
+                    ]
+                    zone_list.append(polygon)
+        
+        # Build masks
+        detector.build_zone_mask(h, w)
+        
+        return detector
 
     def _process_flow(self):
         # Setup source
@@ -198,6 +245,21 @@ class TrafficSystem:
                 licensePlate_recognizer = LicensePlateRecognizer(license_model=self.license_model, character_model=self.character_model)
                 self.violation_manager = ViolationManager(violations=violations, recognizer=licensePlate_recognizer)
                 
+                # Initialize Light Signal Detector from saved zones
+                light_zones_config = zones.get("light_zones", {})
+                h, w = self.first_frame.shape[:2]
+                light_detector = self._init_light_detector(h, w, light_zones_config)
+                light_fsm = None
+                if light_detector is not None:
+                    initial_light_list = light_detector.detect_light_signals(self.first_frame)
+                    processed_initial_lights = []
+                    for light in initial_light_list:
+                        if light is None:
+                            processed_initial_lights.append(light)
+                        else:
+                            processed_initial_lights.append(light[0])  # Extract only the state
+                    light_fsm = LightSignalFSM(initial_states=processed_initial_lights)
+                
                 frame_counter = 0
                 first_run = False
             
@@ -225,18 +287,29 @@ class TrafficSystem:
                     class_id=tracker_cls_ids
                 )
             
-            visualized_tracked_objs, visualized_sv_detections = self.filter_vehicles_in_zone(all_tracked_objs, sv_detections, frame_counter, buffer_maxlen)
+            visualized_tracked_objs, visualized_sv_detections = self.filter_vehicles_in_zone(tracked_objs, all_tracked_objs, sv_detections, frame_counter, buffer_maxlen)
 
             # Update frame buffer
             frame_buffer.append((frame_counter, frame.copy()))
             
+            # Detect traffic light states
+            if light_detector is not None and light_fsm is not None:
+                # Detect every 10 frames to improve FPS
+                if frame_counter % 10 == 0:
+                    detected_lights = light_detector.detect_light_signals(frame)
+                    traffic_light_states = light_fsm.update(candidates=detected_lights, frame_idx=frame_counter)
+                else:
+                    traffic_light_states = light_fsm.get_states()
+            else:
+                # Fallback to hardcoded values if no light zones configured
+                traffic_light_states = [None, 'RED', None]
+            
             # Violation Update
-            # Using mock traffic light for now, or we can add logic to detect it
             stats = self.violation_manager.update(
                 vehicles=visualized_tracked_objs, 
                 sv_detections=visualized_sv_detections, 
                 frame=frame, 
-                traffic_light_state=[None, 'RED', 'RED'], 
+                traffic_light_state=traffic_light_states, 
                 frame_buffer=frame_buffer, 
                 fps=FPS, 
                 save_queue=self.violation_queue

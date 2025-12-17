@@ -9,14 +9,20 @@ from utils.config import save_config
 from utils.storage import MinioClient
 
 # Initialize System
+# TrafficSystem represents the physical detection system, so a single global instance is appropriate.
 system = TrafficSystem()
-minio_client = MinioClient()
 
+# Initialize MinIO Client gracefully
+try:
+    minio_client = MinioClient()
+except Exception as e:
+    print(f"Warning: Could not initialize MinIO Client: {e}")
+    minio_client = None
+
+# --- Dashboard Logic ---
 def get_dashboard_stats():
-    # In a real app, query MinIO or a DB
-    # For now, return mock or in-memory stats if accessible
-    # System doesn't expose stats easily in current design without running
-    # So we will just show placeholders or query MinIO bucket count if possible
+    if not minio_client:
+        return "MinIO storage not available."
     try:
         proofs = minio_client.s3.list_objects_v2(Bucket=minio_client.buckets['proofs'])
         count = proofs.get('KeyCount', 0)
@@ -25,14 +31,15 @@ def get_dashboard_stats():
         return f"Error connecting to MinIO: {e}"
 
 def get_proof_gallery():
+    if not minio_client:
+        return []
     try:
         objects = minio_client.s3.list_objects_v2(Bucket=minio_client.buckets['proofs'], MaxKeys=10)
         images = []
         if 'Contents' in objects:
             for obj in objects['Contents']:
-                # Generate presigned URL or download
-                # For local display, we might need to download to temp
-                # But for simplicity, let's just return a placeholder or skip if complex
+                # Note: In a real deployment, use presigned URLs or a proxy.
+                # Assuming localhost access for now as per original code.
                 images.append((f"http://localhost:9000/{minio_client.buckets['proofs']}/{obj['Key']}", obj['Key']))
         return images
     except:
@@ -40,7 +47,10 @@ def get_proof_gallery():
 
 # --- Visualization Logic ---
 def stream_video():
-    system.start()
+    if not system.running:
+        system.start()
+    
+    # We iterate over the generator
     for frame, stats in system._process_flow():
         if not system.running:
             break
@@ -50,121 +60,103 @@ def stop_system():
     system.stop()
     return None, "System Stopped"
 
-# --- Drawing Logic ---
-current_points = []
-current_image = None
-drawing_mode = "polygon" # "polygon" or line categories
+# --- Drawing Logic (State-based) ---
 
-def capture_frame_for_drawing():
+def get_initial_drawing_state():
+    return {
+        "points": [],
+        "image": None,
+        "mode": "Polygon"
+    }
+
+def capture_frame_for_drawing(state):
     frame = system.capture_first_frame()
     if frame is None:
-        return None, "Failed to capture frame"
+        return None, "Failed to capture frame. Start system first to get a frame?", state
     
-    # Also reset current points for fresh start?
-    # global current_points
-    # current_points = []
-    global current_image
-    current_image = frame
-    return frame, "Frame Captured"
+    # Update state
+    state["image"] = frame
+    state["points"] = [] # Reset points on new image
+    
+    return frame, "Frame Captured", state
 
-def load_image_for_drawing(image_input):
-    global current_image, current_points
+def load_image_for_drawing(image_input, state):
     if image_input is None:
-        return None
-    current_image = image_input
-    current_points = []
-    # If user uploads, we use it
-    return image_input
+        return None, state
+    
+    state["image"] = image_input
+    state["points"] = []
+    
+    return image_input, state
 
-def on_select(evt: gr.SelectData, image):
-    global current_points, current_image
-    if image is None: 
-        return image
+def on_select(evt: gr.SelectData, image_input, state, mode_input):
+    if state["image"] is None and image_input is not None:
+        state["image"] = image_input
+        
+    if state["image"] is None:
+        return image_input, state
     
     x, y = evt.index[0], evt.index[1]
-    current_points.append([x, y])
+    state["points"].append([x, y])
+    points = state["points"]
+    mode = state["mode"] if "mode" in state else mode_input # Use state mode or input
     
-    # Draw points on a copy
-    img_copy = image.copy()
-    for pt in current_points:
+    # Draw logic
+    img_copy = state["image"].copy()
+    
+    # Draw points
+    for pt in points:
         cv2.circle(img_copy, tuple(pt), 5, (0, 255, 0), -1)
     
-    # Draw polygon preview
-    if drawing_mode == "polygon" and len(current_points) >= 2:
-         # Draw lines connecting points for polygon preview
-         pts = np.array(current_points, np.int32).reshape((-1, 1, 2))
-         cv2.polylines(img_copy, [pts], False, (255, 0, 0), 2)
-         if len(current_points) >= 3:
-              cv2.polylines(img_copy, [pts], True, (255, 0, 0), 2)
-              
-    elif drawing_mode != "polygon" and len(current_points) >= 2:
-         # Draw lines pairs
-         for j in range(0, len(current_points)-1, 2):
-            cv2.line(img_copy, tuple(current_points[j]), tuple(current_points[j+1]), (0, 0, 255), 2)
-
-    return img_copy
-
-def clear_points(image_input):
-    global current_points
-    current_points = []
-    # Return original image (we need to track it)
-    global current_image
-    if current_image is not None:
-        return current_image
-    return image_input
-
-def save_drawing(mode):
-    global current_points
-    if not current_points:
-        return "No points to save"
+    # Draw lines/polygons/rectangles
+    if mode == "Polygon" and len(points) >= 2:
+        pts = np.array(points, np.int32).reshape((-1, 1, 2))
+        cv2.polylines(img_copy, [pts], True if len(points) >= 3 else False, (255, 0, 0), 2)
     
-    zones = load_zones()
-    print(zones)
-    
-    if mode == "Polygon":
-        if len(current_points) < 3:
-            return "Polygon needs at least 3 points"
-        zones["polygon"] = current_points
-    else:
-        # It's a line category
-        category = mode_map.get(mode, "violation_lines")
+    elif mode in light_zone_map and len(points) >= 2:
+        # Draw rectangles for light zones (2 points = 1 rectangle)
+        for j in range(0, len(points)-1, 2):
+            cv2.rectangle(img_copy, tuple(points[j]), tuple(points[j+1]), (0, 255, 255), 2)
         
-        # Ensure 'lines_config' exists
-        if "lines_config" not in zones:
-            zones["lines_config"] = {}
-            
-        zones["lines_config"][category] = current_points
-        # Also save to "lines" flat list for backward compat/default if basic "lines"
-        if category == "violation_lines":
-             zones["lines"] = current_points
-        
-    save_zones(zones)
-    return f"Saved {len(current_points)} points for {mode}"
+    elif mode in line_zone_map and len(points) >= 2:
+        # Draw line pairs for line-based modes
+        for j in range(0, len(points)-1, 2):
+            cv2.line(img_copy, tuple(points[j]), tuple(points[j+1]), (0, 0, 255), 2)
 
-def revert_point(image_input):
-    global current_points
-    if current_points:
-        current_points.pop()
+    return img_copy, state
+
+def clear_points(state):
+    state["points"] = []
+    return state["image"], state
+
+def revert_point(state):
+    if state["points"]:
+        state["points"].pop()
     
     # Redraw
-    global current_image
-    if current_image is None: return None
-    img_copy = current_image.copy()
+    if state["image"] is None:
+        return None, state
+        
+    img_copy = state["image"].copy()
+    points = state["points"]
+    mode = state["mode"]
     
-    for pt in current_points:
+    for pt in points:
         cv2.circle(img_copy, tuple(pt), 5, (0, 255, 0), -1)
         
-    if drawing_mode == "polygon":
-         if len(current_points) >= 2:
-             pts = np.array(current_points, np.int32).reshape((-1, 1, 2))
-             cv2.polylines(img_copy, [pts], len(current_points)>=3, (255, 0, 0), 2)
-    else:
-         if len(current_points) >= 2:
-             for j in range(0, len(current_points)-1, 2):
-                cv2.line(img_copy, tuple(current_points[j]), tuple(current_points[j+1]), (0, 0, 255), 2)
-    return img_copy
+    if mode == "Polygon" and len(points) >= 2:
+         pts = np.array(points, np.int32).reshape((-1, 1, 2))
+         cv2.polylines(img_copy, [pts], len(points)>=3, (255, 0, 0), 2)
+    elif mode in light_zone_map and len(points) >= 2:
+         for j in range(0, len(points)-1, 2):
+            cv2.rectangle(img_copy, tuple(points[j]), tuple(points[j+1]), (0, 255, 255), 2)
+    elif mode in line_zone_map and len(points) >= 2:
+         for j in range(0, len(points)-1, 2):
+            cv2.line(img_copy, tuple(points[j]), tuple(points[j+1]), (0, 0, 255), 2)
+            
+    return img_copy, state
 
-mode_map = {
+line_zone_map = {
     "Violation Lines": "violation_lines", 
     "Special Violation Lines": "special_violation_lines",
     "Left Exception Lines": "left_exception_lines",
@@ -172,48 +164,86 @@ mode_map = {
     "Other Exception Lines": "other_exception_lines"
 }
 
-def set_drawing_mode(mode):
-    global drawing_mode, current_points
+# Mapping for traffic light detection zones (rectangles)
+light_zone_map = {
+    "Straight Light Zone": "straight",
+    "Left Light Zone": "left",
+    "Right Light Zone": "right"
+}
+
+def save_drawing(state):
+    points = state["points"]
+    mode = state["mode"]
+    
+    if not points:
+        return "No points to save"
+    
+    zones = load_zones()
+    
     if mode == "Polygon":
-        drawing_mode = "polygon"
-    else:
-        # Map nice name to internal key if needed, or just use mode
-        drawing_mode = mode # We'll handle looking up keys in save/draw
+        if len(points) < 3:
+            return "Polygon needs at least 3 points"
+        zones["polygon"] = points
+    elif mode in light_zone_map:
+        # Traffic light zone (rectangle mode)
+        if len(points) < 2:
+            return "Light zone needs at least 2 points (top-left, bottom-right)"
+        if len(points) % 2 != 0:
+            return "Light zone needs an even number of points (pairs of corners)"
         
-    current_points = []
-    # Return status and cleared image
-    global current_image
-    return f"Mode switched to {mode}. Points cleared.", current_image
+        category = light_zone_map[mode]
+        # Ensure 'light_zones' exists
+        if "light_zones" not in zones:
+            zones["light_zones"] = {"straight": [], "left": [], "right": []}
+        
+        zones["light_zones"][category] = points
+    elif mode in line_zone_map:
+        # It's a line category
+        category = line_zone_map.get(mode, "violation_lines")
+        
+        # Ensure 'lines_config' exists
+        if "lines_config" not in zones:
+            zones["lines_config"] = {}
+            
+        zones["lines_config"][category] = points
+        # Backward compatibility
+        if category == "violation_lines":
+             zones["lines"] = points
+        
+    save_zones(zones)
+    return f"Saved {len(points)} points for {mode}"
+
+def set_drawing_mode(new_mode, state):
+    state["mode"] = new_mode
+    state["points"] = []
+    # Return status, cleared image (or original image cleared of points), and updated state
+    return f"Mode switched to {new_mode}. Points cleared.", state["image"], state
+
 
 # --- Settings Logic ---
 def update_settings(data_path, vehicle_model, license_model, tracker, conf, fps):
     new_config = system.config.copy()
     
-    # Update system config
     if 'system' not in new_config: new_config['system'] = {}
     new_config['system']['data_path'] = data_path
     new_config['system']['vehicle_model'] = vehicle_model
     new_config['system']['license_model'] = license_model
     new_config['system']['tracker'] = tracker
     
-    # Update detection/violation config
     new_config['detections']['conf_threshold'] = conf
     new_config['violation']['fps'] = fps
     
     system.update_config(new_config)
-    
-    # Reload models if changed? 
-    # For now, we update config. 
-    # Ideally TrafficSystem should detect change and reload, but that's complex. 
-    # We'll just save and let user restart or handle it in system.update_config if we want dynamic reload.
-    
     save_config(new_config, system.config_path)
-    return "Settings Saved. Restart to apply model changes."
+    return "Settings Saved. Restart system to apply changes."
 
 
 # --- UI Construction ---
 with gr.Blocks(title="Traffic Violation Detection System", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# Traffic Violation Detection System")
+    
+    # Global state for the session
+    drawing_state_comp = gr.State(get_initial_drawing_state())
     
     with gr.Tabs():
         # --- Tab 1: Dashboard ---
@@ -222,9 +252,6 @@ with gr.Blocks(title="Traffic Violation Detection System", theme=gr.themes.Soft(
             stats_output = gr.Textbox(label="Status", value=get_dashboard_stats)
             refresh_btn = gr.Button("Refresh Stats")
             refresh_btn.click(get_dashboard_stats, outputs=stats_output)
-            
-            # Proofs (Placeholder for now as linking to MinIO images needs signed URLs or proxy)
-            # gr.Gallery(label="Latest Proofs", value=get_proof_gallery)
             
         # --- Tab 2: Visualization ---
         with gr.Tab("Visualization"):
@@ -244,8 +271,7 @@ with gr.Blocks(title="Traffic Violation Detection System", theme=gr.themes.Soft(
             gr.Markdown("### Interactive Zone Editor")
             with gr.Row():
                 with gr.Column(scale=1):
-                    # Dropdown for advanced modes
-                    drawing_modes = ["Polygon", "Violation Lines", "Special Violation Lines", "Left Exception Lines", "Right Exception Lines", "Other Exception Lines"]
+                    drawing_modes = ["Polygon", "Violation Lines", "Special Violation Lines", "Left Exception Lines", "Right Exception Lines", "Other Exception Lines", "Straight Light Zone", "Left Light Zone", "Right Light Zone"]
                     mode_dropdown = gr.Dropdown(drawing_modes, label="Drawing Mode", value="Polygon")
                     
                     capture_btn = gr.Button("Capture Frame from Source")
@@ -255,20 +281,37 @@ with gr.Blocks(title="Traffic Violation Detection System", theme=gr.themes.Soft(
                     draw_status = gr.Textbox(label="Status")
                 
                 with gr.Column(scale=3):
-                    # We need an image to draw on. Let's allow uploading or capturing a frame.
-                    canvas = gr.Image(label="Drawing Canvas (Upload or Capture)", interactive=True, type="numpy")
+                    canvas = gr.Image(label="Drawing Canvas", interactive=True, type="numpy")
 
             # Update state when mode changes
-            mode_dropdown.change(set_drawing_mode, inputs=mode_dropdown, outputs=[draw_status, canvas])
+            mode_dropdown.change(set_drawing_mode, 
+                               inputs=[mode_dropdown, drawing_state_comp], 
+                               outputs=[draw_status, canvas, drawing_state_comp])
             
             # Event listeners
-            capture_btn.click(capture_frame_for_drawing, outputs=[canvas, draw_status])
-            canvas.upload(load_image_for_drawing, inputs=canvas, outputs=canvas)
-            canvas.select(on_select, inputs=canvas, outputs=canvas)
+            capture_btn.click(capture_frame_for_drawing, 
+                            inputs=[drawing_state_comp], 
+                            outputs=[canvas, draw_status, drawing_state_comp])
             
-            revert_btn.click(revert_point, inputs=canvas, outputs=canvas)
-            clear_btn.click(clear_points, inputs=canvas, outputs=canvas)
-            save_poly_btn.click(save_drawing, inputs=mode_dropdown, outputs=draw_status)
+            canvas.upload(load_image_for_drawing, 
+                        inputs=[canvas, drawing_state_comp], 
+                        outputs=[canvas, drawing_state_comp])
+            
+            canvas.select(on_select, 
+                        inputs=[canvas, drawing_state_comp, mode_dropdown], 
+                        outputs=[canvas, drawing_state_comp])
+            
+            revert_btn.click(revert_point, 
+                           inputs=[drawing_state_comp], 
+                           outputs=[canvas, drawing_state_comp])
+            
+            clear_btn.click(clear_points, 
+                          inputs=[drawing_state_comp], 
+                          outputs=[canvas, drawing_state_comp])
+            
+            save_poly_btn.click(save_drawing, 
+                              inputs=[drawing_state_comp], 
+                              outputs=[draw_status])
             
         # --- Tab 4: Settings ---
         with gr.Tab("Settings"):

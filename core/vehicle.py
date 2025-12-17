@@ -50,7 +50,7 @@ class Vehicle(KalmanBoxTracker):
             padding = config['violation']['padding']
 
 
-        candidate_lp = recognizer.update(self, frame, state)
+        candidate_lp = recognizer.update(frame, state)
 
         final_lp = self.update_license_plate(candidate_lp)
 

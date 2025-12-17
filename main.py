@@ -193,7 +193,7 @@ def main():
         # Update light signal FSMs
         if args.light_detect == 'True':
             # to improve FPS, as heavy masking is quite costly (masking every frame drops the FPS to about 13)
-            if frame_counter % 5 == 0:
+            if frame_counter % 10 == 0:
                 detected_lights = light_detector.detect_light_signals(frame)
                 traffic_light_states = light_fsm.update(candidates=detected_lights, frame_idx=frame_counter)
             else:

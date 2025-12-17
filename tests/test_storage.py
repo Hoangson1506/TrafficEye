@@ -79,10 +79,10 @@ def test_save_video_proof(minio_client, dummy_frame):
     vehicle_id = 999
     violation_type = "TestViolation"
     
-    # Create dummy frames
-    frames = [dummy_frame for _ in range(10)]
+    # Create dummy frames as (frame_counter, frame) tuples
+    frames = [(i, dummy_frame) for i in range(10)]
     
-    success = minio_client.save_video_proof(frames, vehicle_id, violation_type, fps=10)
+    success = minio_client.save_video_proof(frames, vehicle_id, violation_type, bboxes=None, fps=10)
     assert success is True
     
     response = minio_client.s3.list_objects_v2(Bucket=minio_client.buckets['proofs'])

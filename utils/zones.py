@@ -6,15 +6,27 @@ def load_zones(zone_path="zones.json"):
     """
     Load zones from a JSON file.
     Returns:
-        dict: zone configuration with 'polygon' and 'lines'.
+        dict: zone configuration with 'polygon', 'lines', 'lines_config', and 'light_zones'.
     """
-    default_zones = {"polygon": [], "lines": []}
+    default_zones = {
+        "polygon": [], 
+        "lines": [],
+        "lines_config": {},
+        "light_zones": {
+            "straight": [],
+            "left": [],
+            "right": []
+        }
+    }
     if not os.path.exists(zone_path):
         return default_zones
     
     try:
         with open(zone_path, 'r') as f:
             zones = json.load(f)
+        # Ensure light_zones key exists for backward compatibility
+        if "light_zones" not in zones:
+            zones["light_zones"] = default_zones["light_zones"]
         return zones
     except Exception as e:
         print(f"Error loading zones: {e}")
