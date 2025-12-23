@@ -1,11 +1,12 @@
 # Traffic Violation Detection System
 
-A real-time computer vision system for detecting traffic violations, tracking vehicles, and capturing evidence including license plates. Built with YOLOv12 for detection, SORT/ByteTrack for tracking, and MinIO for evidence storage.
+A real-time computer vision system for detecting traffic violations, tracking vehicles, and capturing evidence including license plates. Built with YOLOv11 for detection, SORT/ByteTrack for tracking, fast_plate_ocr for license plate recognition, and MinIO for evidence storage.
 
 ## Demo
 
 ### Live Detection
 ![Live vehicle tracking and violation detection](assets/demo.gif)
+![Live vehicle tracking and violation detection 2](assets/demo2.gif)
 
 ### Red Light Running Detection
 
