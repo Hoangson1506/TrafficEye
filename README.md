@@ -2,6 +2,28 @@
 
 A real-time computer vision system for detecting traffic violations, tracking vehicles, and capturing evidence including license plates. Built with YOLOv12 for detection, SORT/ByteTrack for tracking, and MinIO for evidence storage.
 
+## Demo
+
+### Live Detection
+![Live vehicle tracking and violation detection](assets/demo.gif)
+
+### Red Light Running Detection
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/Red%20Light_1.jpg" width="1000" alt="Detection on rainy day"/>
+      <br/>
+      <em>Detection on rainy day</em>
+    </td>
+    <td align="center">
+      <img src="assets/Red%20Light_3.jpg" width="1000" alt="Detection on sunny day"/>
+      <br/>
+      <em>Detection on sunny day</em>
+    </td>
+  </tr>
+</table>
+
 ## Features
 
 - **Vehicle Detection** — Detects cars, motorcycles, buses, and trucks using YOLO
