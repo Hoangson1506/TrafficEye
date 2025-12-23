@@ -5,7 +5,7 @@ from collections import deque
 import queue
 import threading
 from ultralytics import YOLO
-from paddleocr import PaddleOCR
+from fast_plate_ocr import LicensePlateRecognizer as FastRecognizer
 import cv2
 
 from track.sort import SORT
@@ -22,6 +22,7 @@ from utils import (
     violation_save_worker,
     load_zones,
     render_frame,
+    MinioClient
 ) 
 from detect.utils import preprocess_detection_result
 
@@ -40,7 +41,7 @@ class TrafficSystem:
         
         self.vehicle_model = YOLO(self.vehicle_model_path, task='detect', verbose=False)
         self.license_model = YOLO(self.license_model_path, task='detect', verbose=False)
-        self.character_model = PaddleOCR(use_angle_cls=True, lang='en')
+        self.character_model = FastRecognizer('cct-xs-v1-global-model', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
         
         self.tracker_instance = None
         self.violation_manager = None
@@ -67,6 +68,8 @@ class TrafficSystem:
 
     def start_worker(self):
         if self.worker_thread is None or not self.worker_thread.is_alive():
+            # Start Minio client
+            _ = MinioClient()
             self.worker_thread = threading.Thread(target=violation_save_worker, args=(self.violation_queue,), daemon=True)
             self.worker_thread.start()
 

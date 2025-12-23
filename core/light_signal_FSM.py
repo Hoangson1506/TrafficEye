@@ -22,7 +22,7 @@ class LightSignalFSM:
     def update(self, candidates: list, frame_idx):
         print(
         f"\r{self.states}",
-        end="",
+        end="\n",
         flush=True,
     )
         for i in range(3):

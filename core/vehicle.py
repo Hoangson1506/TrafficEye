@@ -13,7 +13,6 @@ class Vehicle(KalmanBoxTracker):
 
         self.is_being_tracked = False
         self.has_violated = False
-        self.straight_light_signal_when_crossing = None
         self.going_straight = True
         self.frame_of_violation = None
         self.state_when_violation = None
@@ -42,18 +41,21 @@ class Vehicle(KalmanBoxTracker):
         return self.license_plate
     
 
-    def mark_violation(self, violation_type, recognizer, frame=None, padding=None,
+    def mark_violation(self, violation_type, frame=None, padding=None,
                        frame_buffer=None, bboxes_buffer=None, fps=30, state=None, save_queue=None):
 
         if padding is None:
-            padding = config['violation']['padding']
+            padding = config['violation']['padding']            
 
-
-        candidate_lp = recognizer.update(frame, state)
-
-        final_lp = self.update_license_plate(candidate_lp)
-
-        if final_lp is None:
+        # Use already-accumulated license plate votes (from continuous detection)
+        # If threshold was met, self.license_plate is set; otherwise get best candidate
+        if self.license_plate is not None:
+            final_lp = self.license_plate
+        elif self.lp_votes:
+            # Threshold not met, but we have candidates - use the best one
+            final_lp = max(self.lp_votes, key=self.lp_votes.get)
+        else:
+            # No candidates at all - fall back to UNIDENTIFIED
             final_lp = "UNIDENTIFIED"
 
         if self.has_violated is True:

@@ -42,11 +42,10 @@ class LicensePlateRecognizer:
             return None
 
         plate_text = self._ocr(lp_crop)
-        print(plate_text)
         if plate_text is None or len(plate_text) <= 3:
             print("Cannot RECOGNIZE license plates")
             return None
-        print(plate_text)
+        print(f"License Plate Text: {plate_text}")
         return plate_text
 
 

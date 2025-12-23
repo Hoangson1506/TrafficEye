@@ -11,7 +11,7 @@ class Violation:
         self.name = name
         self.polygon_zone = sv.PolygonZone(polygon=polygon_points, triggering_anchors=[sv.Position.CENTER])
 
-    def check_violation(self, recognizer, vehicles: List[Vehicle]):
+    def check_violation(self, vehicles: List[Vehicle]):
         """Check violation of vehicles
 
         Args:
@@ -48,7 +48,7 @@ class RedLightViolation(Violation):
             # assuming the system will be configured via UI.
             self.draw_line(kwargs.get('frame', None), kwargs.get('window_name', "Traffic Violation Detection"))
 
-    def check_violation(self, recognizer, vehicles: List[Vehicle], sv_detections: sv.Detections, frame, traffic_light_state: list=[None, 'RED', 'GREEN'], **kwargs):
+    def check_violation(self, vehicles: List[Vehicle], sv_detections: sv.Detections, frame, traffic_light_state: list=[None, 'RED', 'GREEN'], **kwargs):
         """Check the violation state of vehicles tracked
 
         Args:
@@ -122,44 +122,44 @@ class RedLightViolation(Violation):
 
         # State update
         for i, vehicle in enumerate(vehicles):
-            # Set violation state to True right after crossing the violation line no matter what the traffic light state is
-            if violated_mask[i]:
+            # Only mark violation if crossing violation line AND straight light is RED
+            if violated_mask[i] and straight_light == 'RED':
                 vehicle.has_violated = True
                 vehicle.straight_light_signal_when_crossing = straight_light
                 vehicle.frame_of_violation = frame.copy()
                 vehicle.state_when_violation = vehicle.get_state()[0]
 
+            # Special violations (e.g., no U-turn) are always violations regardless of light
             if special_violated_mask[i]:
                 vehicle.has_violated = True
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = frame.copy()
                 vehicle.state_when_violation = vehicle.get_state()[0]
 
-            # allow exceptions
+            # Allow exceptions: clear violation if crossing exception lines (legal turn)
+            # This handles cases where turning left/right is allowed even when straight is RED
             if exception_mask[i] and vehicle.has_violated:
                 vehicle.has_violated = False
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = None
                 vehicle.state_when_violation = None
             
-            # turning when blocked
+            # Mark as turning (but still violated) if crossing blocked turn lines
             if turning_blocked_mask[i] and vehicle.has_violated:
                 vehicle.going_straight = False
                 vehicle.frame_of_violation = frame.copy()
                 vehicle.state_when_violation = vehicle.get_state()[0]
 
-            # decide violation when leaving the polygon zone
+            # Finalize violation when leaving the polygon zone
             if outside_polygon_mask[i] and vehicle.has_violated:
-                # straight going vehicle running red light
-                if vehicle.going_straight and vehicle.straight_light_signal_when_crossing == 'RED':
-                    vehicle.mark_violation("Red Light", recognizer, frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, 
+                # Determine violation type based on whether vehicle was going straight or turning
+                if vehicle.going_straight:
+                    vehicle.mark_violation("Red Light", frame=vehicle.frame_of_violation, frame_buffer=frame_buffer, 
                                            bboxes_buffer=vehicle.bboxes_buffer, fps=fps, state=vehicle.state_when_violation, save_queue=save_queue)
-                    violated_vehicles.append(vehicle)
-                # turning vehicle running red light
-                elif not vehicle.going_straight:
-                    vehicle.mark_violation("Red Light - Turning", recognizer, frame=vehicle.frame_of_violation,
-                                           frame_buffer=frame_buffer, bboxes_buffer=vehicle.bboxes_buffer, fps=fps, state=vehicle.state_when_violation, save_queue=save_queue)
-                    violated_vehicles.append(vehicle)
+                else:
+                    vehicle.mark_violation("Red Light - Turning", frame=vehicle.frame_of_violation,
+                                           frame_buffer=frame_buffer, bboxes_buffer=vehicle.bboxes_buffer, state=vehicle.state_when_violation, fps=fps, save_queue=save_queue)
+                violated_vehicles.append(vehicle)
 
         return violated_vehicles
 

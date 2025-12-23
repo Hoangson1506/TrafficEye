@@ -8,7 +8,7 @@ from utils import (
     parse_args_tracking,
     draw_polygon_zone, render_frame,
     handle_result_filename, violation_save_worker,
-    load_config
+    load_config, MinioClient
 )
 from detect.utils import preprocess_detection_result
 from core.violation import RedLightViolation
@@ -79,9 +79,14 @@ def main():
     data_path = args.data_path
     vehicle_model = YOLO(args.vehicle_model, task='detect', verbose=False)
     license_model = YOLO(args.license_model, task='detect', verbose=False)
-    character_model = FastRecognizer('cct-xs-v1-global-model')
+    character_model = FastRecognizer('cct-xs-v1-global-model', providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
     
     device = args.device
+    
+    # Pre-initialize MinIO client to avoid lag on first violation
+    # (boto3/S3 connection is established during startup, not during processing)
+    _ = MinioClient()
+    
     violation_queue = queue.Queue()
     worker_thread = threading.Thread(target=violation_save_worker,args=(violation_queue,), daemon=True)
     worker_thread.start()

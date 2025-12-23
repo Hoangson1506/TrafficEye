@@ -18,7 +18,7 @@ logging:
 system:
   character_model: models/yolo11s.pt
   data_path: data/test_video.mp4
-  device: cpu
+  device: cuda
   license_model: models/lp_yolo11s.pt
   output_dir: output
   save: false
@@ -41,6 +41,6 @@ tracking:
     max_age: 60
     min_hits: 5
 violation:
-  fps: 30
+  fps: 60
   padding: 30
   video_proof_duration: 3
